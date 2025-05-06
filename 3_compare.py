@@ -3,6 +3,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from config import (
     FILTERED_BY_MEDIAN_AND_STD_TEMPLATE,
@@ -26,7 +27,11 @@ def compare_stats(language_codes=None):
     # Base output directory for comparison results
     output_dir = "reports"
 
+    print("Starting comparison process...")
+
     for lang in language_codes:
+        print(f"Processing {lang} dataset...")
+
         # Original stats path
         original_stats_path = STATS_PATH_TEMPLATE.format(lang)
 
@@ -42,16 +47,23 @@ def compare_stats(language_codes=None):
         os.makedirs(os.path.dirname(comparison_path), exist_ok=True)
 
         # Check if both files exist
-        if not os.path.exists(original_stats_path) or not os.path.exists(
-            filtered_stats_path
-        ):
+        if not os.path.exists(original_stats_path):
+            print(f"  Error: Original stats file not found: {original_stats_path}")
+            continue
+
+        if not os.path.exists(filtered_stats_path):
+            print(f"  Error: Filtered stats file not found: {filtered_stats_path}")
             continue
 
         # Load stats files
         try:
+            print(f"  Loading original stats from: {original_stats_path}")
             original_stats = pd.read_csv(original_stats_path, sep="\t")
+
+            print(f"  Loading filtered stats from: {filtered_stats_path}")
             filtered_stats = pd.read_csv(filtered_stats_path, sep="\t")
 
+            print(f"  Creating merged dataset with difference calculations...")
             # Create merged dataset
             merged_df = create_merged_dataset(original_stats, filtered_stats)
 
@@ -59,9 +71,13 @@ def compare_stats(language_codes=None):
             merged_df = merged_df.sort_values("preds")
 
             # Save to the specified path
+            print(f"  Saving comparison results to: {comparison_path}")
             merged_df.to_csv(comparison_path, sep="\t", index=False)
 
+            print(f"  ✓ Completed processing for {lang}")
+
         except Exception as e:
+            print(f"  Error processing {lang}: {str(e)}")
             import traceback
 
             traceback.print_exc()
@@ -120,6 +136,7 @@ def create_merged_dataset(original_stats, filtered_stats):
 def main():
     # Process all language files
     compare_stats()
+    print("\nComparison process completed successfully!")
 
 
 if __name__ == "__main__":
