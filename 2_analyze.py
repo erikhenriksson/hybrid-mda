@@ -1,167 +1,152 @@
 import os
-import sys  # Add missing import
+import re
+import sys
 from collections import defaultdict
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from config import (  # Import config
-    DATA_PATH_TEMPLATE,
-    FILTERED_BY_MEDIAN_AND_STD_TEMPLATE,
-    STATS_PATH_TEMPLATE,
-)
+# We'll need to import the template from the same config module
+from config import FILTERED_BY_MEDIAN_AND_STD_TEMPLATE
 
 
-def analyze_text_lengths(input_dir, output_dir):
+def generate_filtered_stats(filtered_dir, language_codes=None):
     """
-    Analyze text length distributions (in words) for processed files and save in separate language files.
+    Generate statistics from filtered data files.
 
     Args:
-        input_dir: Directory containing the processed TSV files
-        output_dir: Directory where to save the analysis results
+        filtered_dir: Base directory containing filtered data files
+        language_codes: List of language codes to process, defaults to ['en', 'fi', 'fr', 'sv']
     """
-    # Languages to process
-    languages = ["en", "fi", "fr", "sv"]
+    if language_codes is None:
+        language_codes = ["en", "fi", "fr", "sv"]
 
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+    for lang in language_codes:
+        print(f"\nProcessing filtered data for {lang}...")
 
-    for lang in languages:
-        print(f"\nAnalyzing {lang} data...")
+        # Construct filtered data path
+        filtered_path = os.path.join(
+            filtered_dir, FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(lang)
+        )
 
-        # Path to processed file - update to use the OUTPUT_PATH_TEMPLATE from config
-        file_path = FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(lang)
-        # Define a new output path for the analysis results
-        output_path = os.path.join(output_dir, f"{lang}_embeds_analysis.tsv")
-
-        if not os.path.exists(file_path):
-            print(f"Warning: File not found - {file_path}")
+        if not os.path.exists(filtered_path):
+            print(f"Filtered file not found: {filtered_path}")
             continue
 
-        # Track statistics by prediction category
-        pred_stats = defaultdict(list)
+        # Output path for statistics
+        output_stats_path = os.path.join(
+            "reports", FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(lang)
+        )
 
-        # Process in chunks to handle large files
-        chunk_size = 10000
-        total_rows = 0
+        # Ensure output directory exists
+        os.makedirs(os.path.dirname(output_stats_path), exist_ok=True)
 
-        try:
-            # Process data in chunks
-            for chunk in tqdm(pd.read_csv(file_path, sep="\t", chunksize=chunk_size)):
-                total_rows += len(chunk)
+        # Process the data and generate statistics
+        process_filtered_file(filtered_path, output_stats_path, lang)
 
-                # Convert preds column if it's a string using the same method as the first code
-                if "preds" in chunk.columns:
-                    # Use the convert_preds_to_key function logic for consistency
-                    def convert_preds(preds_value):
-                        if isinstance(preds_value, str):
-                            try:
-                                preds_value = eval(preds_value)
-                            except:
-                                pass
-                        # Convert to tuple for hashability if it's a list
-                        if isinstance(preds_value, list):
-                            preds_value = tuple(preds_value)
-                        return preds_value
+        print(f"✓ Filtered statistics for {lang} saved to {output_stats_path}")
 
-                    chunk["preds"] = chunk["preds"].apply(convert_preds)
 
-                    # Calculate word counts
-                    chunk["word_count"] = chunk["text"].apply(
-                        lambda x: len(str(x).split())
-                    )
+def process_filtered_file(filtered_path, output_stats_path, lang):
+    """
+    Process a filtered file and generate statistics.
 
-                    # Group by prediction category using the same key format as the first code
-                    for idx, row in chunk.iterrows():
-                        preds_key = str(row["preds"])
-                        pred_stats[preds_key].append(row["word_count"])
+    Args:
+        filtered_path: Path to the filtered data file
+        output_stats_path: Path to save the statistics
+        lang: Language code
+    """
+    # Dictionary to store statistics for each prediction category
+    preds_stats = defaultdict(list)
 
-                # Print progress
-                sys.stdout.write(f"\rProcessed {total_rows} rows")
-                sys.stdout.flush()
+    # Process in chunks to manage memory
+    chunk_size = 10000
+    total_rows = 0
 
-            print(
-                f"\nCompleted analysis for {lang}, found {len(pred_stats)} prediction categories"
+    try:
+        # Process data in chunks
+        for chunk in tqdm(pd.read_csv(filtered_path, sep="\t", chunksize=chunk_size)):
+            total_rows += len(chunk)
+
+            # Process each row in the chunk
+            for _, row in chunk.iterrows():
+                # Get prediction category and convert to a consistent format
+                preds_value = row["preds"]
+
+                # Handle different formats
+                if isinstance(preds_value, str):
+                    try:
+                        preds_value = eval(preds_value)
+                    except:
+                        pass
+
+                # Convert to tuple for hashability if it's a list
+                if isinstance(preds_value, list):
+                    preds_value = tuple(preds_value)
+
+                # Convert to string for consistent lookup
+                preds_key = str(preds_value)
+
+                # Calculate text length (word count)
+                text_length = len(str(row["text"]).split())
+
+                # Add length to stats for this prediction category
+                preds_stats[preds_key].append(text_length)
+
+            # Print progress
+            sys.stdout.write(f"\rProcessed {total_rows} rows")
+            sys.stdout.flush()
+
+        print(
+            f"\nCalculating statistics for {len(preds_stats)} prediction categories..."
+        )
+
+        # Create DataFrame for statistics
+        stats_data = []
+        for preds_key, lengths in preds_stats.items():
+            # Calculate statistics
+            count = len(lengths)
+            median = np.median(lengths)
+
+            # Calculate standard deviation if we have more than one sample
+            std = np.std(lengths) if count > 1 else None
+
+            # Append to statistics data
+            stats_data.append(
+                {
+                    "preds": preds_key,
+                    "count": count,
+                    "median": median,
+                    "std": std if std is not None else "",
+                }
             )
 
-            # Calculate statistics for each prediction category
-            results = []
+        # Create DataFrame and sort by count (descending)
+        stats_df = pd.DataFrame(stats_data)
+        stats_df = stats_df.sort_values("count", ascending=False)
 
-            for preds_key, word_counts in pred_stats.items():
-                # Calculate statistics
-                count = len(word_counts)
-                median = np.median(word_counts) if count > 0 else 0
-                mean = np.mean(word_counts) if count > 0 else 0
-                std = np.std(word_counts) if count > 0 else 0
-                min_count = np.min(word_counts) if count > 0 else 0
-                max_count = np.max(word_counts) if count > 0 else 0
+        # Save to file
+        stats_df.to_csv(output_stats_path, sep="\t", index=False)
 
-                # Store results
-                results.append(
-                    {
-                        "preds": preds_key,  # Keep as string for consistency with first code
-                        "count": count,
-                        "median": median,
-                        "mean": mean,
-                        "std": std,
-                        "min": min_count,
-                        "max": max_count,
-                    }
-                )
+        print(f"Statistics saved with {len(stats_df)} prediction categories")
+        print(f"Total rows processed: {total_rows}")
 
-            # Create DataFrame from results
-            results_df = pd.DataFrame(results)
+    except Exception as e:
+        print(f"Error processing filtered data for {lang}: {str(e)}")
+        import traceback
 
-            # Save to TSV for this language
-            results_df.to_csv(output_path, sep="\t", index=False)
-            print(f"Analysis for {lang} saved to {output_path}")
-
-            # Generate histograms for the top 5 most common prediction categories
-            top_categories = sorted(
-                pred_stats.items(), key=lambda x: len(x[1]), reverse=True
-            )[:5]
-
-            plt.figure(figsize=(15, 10))
-            for i, (preds_key, word_counts) in enumerate(top_categories):
-                plt.subplot(2, 3, i + 1)
-                plt.hist(word_counts, bins=50, alpha=0.7)
-
-                # Try to make the title more readable
-                title = preds_key
-                if len(title) > 20:
-                    title = title[:18] + "..."
-
-                plt.title(f"{lang}: {title}")
-                plt.xlabel("Word Count")
-                plt.ylabel("Frequency")
-
-            # Save the plot
-            plt.tight_layout()
-            plt.savefig(os.path.join(output_dir, f"{lang}_word_distributions.png"))
-            plt.close()
-
-        except Exception as e:
-            print(f"Error analyzing {lang} data: {e}")
-            import traceback
-
-            traceback.print_exc()
-
-    print(f"\nAnalysis complete. Results saved to {output_dir}")
+        traceback.print_exc()
 
 
 def main():
-    # Update paths to use the config file approach
-    output_dir = (
-        os.path.dirname(FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format("en")) + "/analysis"
-    )
+    # Base directory containing filtered data files
+    filtered_dir = "./data"
 
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+    # Process all language files
+    generate_filtered_stats(filtered_dir)
 
-    # Run analysis - no need to pass input_dir since we're using OUTPUT_PATH_TEMPLATE
-    analyze_text_lengths(None, output_dir)
+    print("\nProcessing Complete")
 
 
 if __name__ == "__main__":

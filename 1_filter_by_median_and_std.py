@@ -67,7 +67,7 @@ def process_language_data(language_code):
     # Updated paths
     stats_path = STATS_PATH_TEMPLATE.format(language_code)
     data_path = DATA_PATH_TEMPLATE.format(language_code)
-    output_path = FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(language_code)
+    output_path = "data/" + FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(language_code)
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
