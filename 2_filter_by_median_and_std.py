@@ -2,13 +2,13 @@ import os
 import re
 import sys
 
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
 from config import (
-    DATA_PATH_TEMPLATE,
-    FILTERED_BY_MEDIAN_AND_STD_TEMPLATE,
-    STATS_PATH_TEMPLATE,
+    FILTERED_BY_MEDIAN_AND_STD_PATH,
+    FILTERED_BY_MIN_LENGTH_PATH,
 )
 
 
@@ -38,7 +38,7 @@ def load_stats_file(stats_path):
         preds_key_str = str(preds_key)
 
         stats_dict[preds_key_str] = {
-            "median": row["median"],
+            "mean": row["mean"],
             "std": row.get("std", 0),  # Handle cases where std might be missing
         }
 
@@ -63,11 +63,21 @@ def convert_preds_to_key(preds_value):
 
 
 def process_language_data(language_code):
-    """Process data for a specific language in chunks."""
-    # Updated paths
-    stats_path = STATS_PATH_TEMPLATE.format(language_code)
-    data_path = DATA_PATH_TEMPLATE.format(language_code)
-    output_path = "data/" + FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(language_code)
+    """Process data for a specific language in chunks with mean +- 1 std filtering."""
+    # Input path (already filtered by minimum length)
+    input_path = (
+        f"data/{FILTERED_BY_MIN_LENGTH_PATH}/{language_code}_embeds_filtered.tsv"
+    )
+
+    # Output path for mean ± std filtering
+    output_path = (
+        f"data/{FILTERED_BY_MEDIAN_AND_STD_PATH}/{language_code}_embeds_filtered.tsv"
+    )
+
+    # Stats path (generated from min length filtered data)
+    stats_path = (
+        f"reports/{FILTERED_BY_MIN_LENGTH_PATH}/{language_code}_embeds_filtered.tsv"
+    )
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -91,7 +101,7 @@ def process_language_data(language_code):
     # Create output file and write header
     try:
         # First, get the header without the index column
-        header_df = pd.read_csv(data_path, sep="\t", nrows=0)
+        header_df = pd.read_csv(input_path, sep="\t", nrows=0)
         # Filter out the 'Unnamed: 0' column if it exists
         header = [col for col in header_df.columns if not col.startswith("Unnamed: ")]
 
@@ -101,7 +111,7 @@ def process_language_data(language_code):
             f_out.write("\t".join(header) + "\n")
 
             # Process data in chunks
-            for chunk in tqdm(pd.read_csv(data_path, sep="\t", chunksize=chunk_size)):
+            for chunk in tqdm(pd.read_csv(input_path, sep="\t", chunksize=chunk_size)):
                 total_rows += len(chunk)
 
                 # Remove unnamed columns
@@ -113,7 +123,6 @@ def process_language_data(language_code):
                 chunk_copy = chunk.copy()
 
                 # Check for missing categories in this chunk and prepare data for filtering
-                text_lengths = []
                 keep_rows = []
 
                 for idx, row in chunk_copy.iterrows():
@@ -135,14 +144,13 @@ def process_language_data(language_code):
 
                     # Calculate text length
                     text_length = len(str(row["text"]).split())
-                    text_lengths.append(text_length)
 
                     # Determine if row should be kept
                     if preds_key in stats_dict:
-                        median = stats_dict[preds_key]["median"]
+                        mean = stats_dict[preds_key]["mean"]
                         std = stats_dict[preds_key]["std"]
-                        lower_bound = max(0, median - std)
-                        upper_bound = median + std
+                        lower_bound = max(0, mean - std)
+                        upper_bound = mean + std
                         keep_rows.append(lower_bound <= text_length <= upper_bound)
                     else:
                         keep_rows.append(False)

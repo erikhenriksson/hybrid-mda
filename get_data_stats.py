@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 import sys
@@ -7,36 +8,34 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-# We'll need to import the template from the same config module
-from config import FILTERED_BY_MEDIAN_AND_STD_TEMPLATE
 
-
-def generate_filtered_stats(filtered_dir, language_codes=None):
+def generate_filtered_stats(input_dir, language_codes=None):
     """
     Generate statistics from filtered data files.
 
     Args:
-        filtered_dir: Base directory containing filtered data files
+        input_dir: Directory containing filtered data files
         language_codes: List of language codes to process, defaults to ['en', 'fi', 'fr', 'sv']
     """
     if language_codes is None:
         language_codes = ["en", "fi", "fr", "sv"]
 
+    # Extract the base directory name to use in output path
+    base_dir_name = os.path.basename(input_dir)
+
     for lang in language_codes:
         print(f"\nProcessing filtered data for {lang}...")
 
         # Construct filtered data path
-        filtered_path = os.path.join(
-            filtered_dir, FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(lang)
-        )
+        filtered_path = os.path.join(input_dir, f"{lang}_embeds_filtered.tsv")
 
         if not os.path.exists(filtered_path):
             print(f"Filtered file not found: {filtered_path}")
             continue
 
-        # Output path for statistics
+        # Output path for statistics - keep same directory structure
         output_stats_path = os.path.join(
-            "reports", FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(lang)
+            "reports", base_dir_name, f"{lang}_embeds_filtered.tsv"
         )
 
         # Ensure output directory exists
@@ -108,6 +107,9 @@ def process_filtered_file(filtered_path, output_stats_path, lang):
             # Calculate statistics
             count = len(lengths)
             median = np.median(lengths)
+            mean = np.mean(lengths)
+            min_length = np.min(lengths)
+            max_length = np.max(lengths)
 
             # Calculate standard deviation if we have more than one sample
             std = np.std(lengths) if count > 1 else None
@@ -117,6 +119,9 @@ def process_filtered_file(filtered_path, output_stats_path, lang):
                 {
                     "preds": preds_key,
                     "count": count,
+                    "min": min_length,
+                    "max": max_length,
+                    "mean": mean,
                     "median": median,
                     "std": std if std is not None else "",
                 }
@@ -140,11 +145,23 @@ def process_filtered_file(filtered_path, output_stats_path, lang):
 
 
 def main():
-    # Base directory containing filtered data files
-    filtered_dir = "./data"
+    # Set up argument parsing
+    parser = argparse.ArgumentParser(
+        description="Generate statistics from filtered text data"
+    )
+    parser.add_argument(
+        "input_dir",
+        type=str,
+        help="Directory containing filtered data files (e.g., data/filtered_by_min_length)",
+    )
+
+    args = parser.parse_args()
+
+    # Default language codes
+    language_codes = ["en", "fi", "fr", "sv"]
 
     # Process all language files
-    generate_filtered_stats(filtered_dir)
+    generate_filtered_stats(args.input_dir, language_codes)
 
     print("\nProcessing Complete")
 
