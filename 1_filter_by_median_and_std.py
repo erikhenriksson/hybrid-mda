@@ -5,6 +5,12 @@ import sys
 import pandas as pd
 from tqdm import tqdm
 
+from config import (
+    DATA_PATH_TEMPLATE,
+    FILTERED_BY_MEDIAN_AND_STD_TEMPLATE,
+    STATS_PATH_TEMPLATE,
+)
+
 
 def load_stats_file(stats_path):
     """Load the statistics file and prepare the stats dictionary."""
@@ -59,9 +65,9 @@ def convert_preds_to_key(preds_value):
 def process_language_data(language_code):
     """Process data for a specific language in chunks."""
     # Updated paths
-    stats_path = f"/scratch/project_462000353/tlundber/umap-embeddings/register-distribution-results-th-optimised/{language_code}_embeds.tsv"
-    data_path = f"/scratch/project_462000353/tlundber/umap-embeddings/data/model_embeds/cleaned/bge-m3-fold-6/th-optimised/{language_code}_embeds.tsv"
-    output_path = f"data/processed/{language_code}_embeds_filtered.tsv"
+    stats_path = STATS_PATH_TEMPLATE.format(language_code)
+    data_path = DATA_PATH_TEMPLATE.format(language_code)
+    output_path = FILTERED_BY_MEDIAN_AND_STD_TEMPLATE.format(language_code)
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
