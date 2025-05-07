@@ -3,4 +3,4 @@ RAW_DATA_PATH = "/scratch/project_462000353/tlundber/umap-embeddings/data/model_
 FILTERED_BY_MEDIAN_AND_STD_PATH = "filtered_by_median_and_std"
 FILTERED_BY_MIN_LENGTH_PATH = "filtered_by_min_length"
 
-MIN_TEXT_LENGTH = 100  # You can adjust this value as needed
+MIN_TEXT_LENGTH = 75  # You can adjust this value as needed
