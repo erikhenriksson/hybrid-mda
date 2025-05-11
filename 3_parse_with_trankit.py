@@ -1,27 +1,33 @@
 import argparse
+import gc  # Garbage collection for memory management
 import os
 import sys
+import time
 from multiprocessing import Pool
 
 import pandas as pd
 import torch
 import trankit
-from tqdm import tqdm
 from trankit import trankit2conllu
 
 from config import FILTERED_BY_MEDIAN_AND_STD_PATH, PARSED_CONLLU_PATH
 
 
-def process_chunk_gpu(chunk_data, language, gpu_id, chunk_idx, total_chunks):
+def process_chunk_gpu(task_data):
     """Process a chunk of data with trankit on a specific GPU."""
+    chunk_data, language, gpu_id, chunk_idx = task_data
+
     try:
+        start_time = time.time()
         # Set CUDA device for this process
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
         # Initialize trankit pipeline with GPU
         p = trankit.Pipeline(language, gpu=True)
 
-        results = []
+        # Initialize the results list
+        results = []  # Make sure this is defined
+
         for idx, row in chunk_data.iterrows():
             try:
                 # Extract text and other columns
@@ -53,9 +59,7 @@ def process_chunk_gpu(chunk_data, language, gpu_id, chunk_idx, total_chunks):
                 continue
 
         # Write chunk results to file
-        chunk_filename = (
-            f"gpu_{gpu_id}_chunk_{chunk_idx:04d}_of_{total_chunks:04d}.conllu"
-        )
+        chunk_filename = f"gpu_{gpu_id}_chunk_{chunk_idx:04d}.conllu"
         chunk_path = os.path.join(PARSED_CONLLU_PATH, "temp_chunks", chunk_filename)
 
         os.makedirs(os.path.dirname(chunk_path), exist_ok=True)
@@ -63,13 +67,23 @@ def process_chunk_gpu(chunk_data, language, gpu_id, chunk_idx, total_chunks):
             for result in results:
                 f.write(result)
 
+        elapsed_time = time.time() - start_time
+        docs_per_second = len(results) / elapsed_time if elapsed_time > 0 else 0
+
         print(
-            f"GPU {gpu_id}: Completed chunk {chunk_idx}/{total_chunks} with {len(results)} documents"
+            f"GPU {gpu_id}: Completed chunk {chunk_idx} with {len(results)} documents in {elapsed_time:.2f}s ({docs_per_second:.2f} docs/s)"
         )
+
+        # Clean up memory
+        del chunk_data, results, p
+        gc.collect()
+        torch.cuda.empty_cache()  # Clear GPU memory
+
         return chunk_path, len(results)
 
     except Exception as e:
         print(f"GPU {gpu_id}: Error processing chunk {chunk_idx}: {str(e)}")
+        # Return empty results if exception occurred
         return None, 0
 
 
@@ -101,58 +115,133 @@ def parse_language_data_gpu(language_code, n_gpus=8):
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.join(PARSED_CONLLU_PATH, "temp_chunks"), exist_ok=True)
 
     # Process in chunks optimized for GPU processing
     chunk_size = 10000  # Smaller chunks for GPU processing
 
-    print(f"Reading input file: {input_path}")
-    print("This might take a while for large files...")
-
-    # First pass: count chunks
-    total_chunks = 0
-    for i, _ in enumerate(pd.read_csv(input_path, sep="\t", chunksize=chunk_size)):
-        total_chunks = i + 1
-
-    print(f"File has {total_chunks} chunks of {chunk_size} rows each")
+    print(f"Starting processing of: {input_path}")
+    print(f"Processing with chunk size: {chunk_size}")
+    print("Processing will begin immediately without counting total chunks first")
 
     # Process chunks with GPU assignment
     chunk_paths = []
     processed_rows = 0
+    chunk_count = 0
 
-    # Create pool of GPU workers
+    start_time = time.time()
+
     with Pool(processes=n_gpus) as pool:
-        # Prepare chunks with GPU assignments
-        tasks = []
-        for idx, chunk in enumerate(
+        # Set up tasks for processing
+        active_tasks = []
+        max_active_tasks = n_gpus * 2  # Allow 2 tasks per GPU in queue
+
+        # Read and process chunks
+        for chunk_idx, chunk in enumerate(
             pd.read_csv(input_path, sep="\t", chunksize=chunk_size)
         ):
-            gpu_id = idx % n_gpus  # Round-robin GPU assignment
-            tasks.append((chunk, language_code, gpu_id, idx, total_chunks))
+            gpu_id = chunk_idx % n_gpus  # Round-robin GPU assignment
 
-        # Process chunks in parallel
-        results = []
-        for task in tqdm(tasks, desc="Processing chunks on GPUs", total=len(tasks)):
-            result = pool.apply_async(process_chunk_gpu, task)
-            results.append(result)
+            # Create and submit task
+            task = (chunk, language_code, gpu_id, chunk_idx)
+            result = pool.apply_async(process_chunk_gpu, (task,))
+            active_tasks.append((result, chunk_idx))
 
-        # Collect results
-        for result in tqdm(results, desc="Collecting results", total=len(results)):
+            # Check completed tasks
+            i = 0
+            while i < len(active_tasks):
+                result, idx = active_tasks[i]
+                if result.ready():
+                    try:
+                        chunk_path, rows = result.get(timeout=1)
+                        if chunk_path:
+                            chunk_paths.append(chunk_path)
+                            processed_rows += rows
+                            chunk_count += 1
+
+                        # Remove from active tasks
+                        active_tasks.pop(i)
+
+                        # Show periodic progress
+                        if chunk_count % 10 == 0:
+                            elapsed = time.time() - start_time
+                            docs_per_second = (
+                                processed_rows / elapsed if elapsed > 0 else 0
+                            )
+                            print(
+                                f"Progress: {chunk_count} chunks processed, {processed_rows} documents, {docs_per_second:.2f} docs/s"
+                            )
+                    except Exception as e:
+                        print(f"Error getting result for chunk {idx}: {str(e)}")
+                        active_tasks.pop(i)
+                else:
+                    i += 1
+
+            # Wait if too many active tasks
+            while len(active_tasks) >= max_active_tasks:
+                # Sleep briefly
+                time.sleep(0.5)
+
+                # Check completed tasks
+                i = 0
+                while i < len(active_tasks):
+                    result, idx = active_tasks[i]
+                    if result.ready():
+                        try:
+                            chunk_path, rows = result.get(timeout=1)
+                            if chunk_path:
+                                chunk_paths.append(chunk_path)
+                                processed_rows += rows
+                                chunk_count += 1
+
+                            # Remove from active tasks
+                            active_tasks.pop(i)
+
+                            # Show periodic progress
+                            if chunk_count % 10 == 0:
+                                elapsed = time.time() - start_time
+                                docs_per_second = (
+                                    processed_rows / elapsed if elapsed > 0 else 0
+                                )
+                                print(
+                                    f"Progress: {chunk_count} chunks processed, {processed_rows} documents, {docs_per_second:.2f} docs/s"
+                                )
+                        except Exception as e:
+                            print(f"Error getting result for chunk {idx}: {str(e)}")
+                            active_tasks.pop(i)
+                    else:
+                        i += 1
+
+        # Wait for remaining tasks to complete
+        print("All chunks submitted, waiting for remaining tasks to complete...")
+        for result, idx in active_tasks:
             try:
-                chunk_path, rows_processed = result.get(
-                    timeout=600
-                )  # 10 minute timeout per chunk
+                chunk_path, rows = result.get(timeout=300)  # 5 minute timeout
                 if chunk_path:
                     chunk_paths.append(chunk_path)
-                    processed_rows += rows_processed
+                    processed_rows += rows
+                    chunk_count += 1
             except Exception as e:
-                print(f"Error collecting result: {str(e)}")
-                continue
+                print(f"Error getting result for chunk {idx}: {str(e)}")
+
+    # Final progress report
+    elapsed = time.time() - start_time
+    docs_per_second = processed_rows / elapsed if elapsed > 0 else 0
+    hours = int(elapsed // 3600)
+    minutes = int((elapsed % 3600) // 60)
+    seconds = int(elapsed % 60)
+    print(f"Processing finished! Total time: {hours}h {minutes}m {seconds}s")
+    print(f"Processed {chunk_count} chunks, {processed_rows} documents")
+    print(f"Average processing speed: {docs_per_second:.2f} docs/s")
 
     # Merge chunk files
     print(f"\nMerging {len(chunk_paths)} chunk files...")
     with open(output_path, "w", encoding="utf-8") as f_out:
-        for i, chunk_path in enumerate(tqdm(chunk_paths, desc="Merging chunks")):
+        for i, chunk_path in enumerate(sorted(chunk_paths)):
             try:
+                print(
+                    f"Merging file {i + 1}/{len(chunk_paths)}: {os.path.basename(chunk_path)}"
+                )
                 with open(chunk_path, "r", encoding="utf-8") as f_in:
                     content = f_in.read()
                     f_out.write(content)
