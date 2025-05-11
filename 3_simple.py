@@ -10,7 +10,7 @@ from trankit import trankit2conllu
 
 from config import (
     FILTERED_BY_MEDIAN_AND_STD_PATH,
-    PARSED_OUTPUT_PATH,
+    PARSED_CONLLU_PATH,
 )
 
 # Language code mapping for Trankit
@@ -36,7 +36,7 @@ def parse_language_data(language_code, batch_size=1000, start_idx=0, end_idx=Non
     )
 
     # Output path for parsed data
-    output_path = f"data/{PARSED_OUTPUT_PATH}/{language_code}_parsed.conllu"
+    output_path = f"data/{PARSED_CONLLU_PATH}/{language_code}_parsed.conllu"
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
