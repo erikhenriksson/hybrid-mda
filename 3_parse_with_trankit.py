@@ -12,6 +12,15 @@ from trankit import trankit2conllu
 
 from config import FILTERED_BY_MEDIAN_AND_STD_PATH, PARSED_CONLLU_PATH
 
+# Define language mapping for Trankit
+# Based on supported languages in Trankit
+TRANKIT_LANGUAGE_MAP = {
+    "en": "english",
+    "fr": "french",
+    "fi": "finnish",
+    "sv": "swedish",  # Try this, or we might need to use a different model
+}
+
 
 def process_chunk_gpu(task_data):
     """Process a chunk of data with trankit on a specific GPU."""
@@ -22,11 +31,22 @@ def process_chunk_gpu(task_data):
         # Set CUDA device for this process
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
+        # Get the proper language name for Trankit
+        trankit_language = TRANKIT_LANGUAGE_MAP.get(language, language)
+
         # Initialize trankit pipeline with GPU
-        p = trankit.Pipeline(language, gpu=True)
+        try:
+            p = trankit.Pipeline(trankit_language, gpu=True)
+        except Exception as e:
+            print(
+                f"Error initializing Trankit pipeline with language '{trankit_language}': {str(e)}"
+            )
+            print(f"Supported languages in Trankit: {trankit.supported_langs}")
+            print("Attempting to use 'english' as fallback...")
+            p = trankit.Pipeline("english", gpu=True)
 
         # Initialize the results list
-        results = []  # Make sure this is defined
+        results = []
 
         for idx, row in chunk_data.iterrows():
             try:
@@ -47,7 +67,7 @@ def process_chunk_gpu(task_data):
                 headers = [
                     "###C: NEWDOC",
                     f"###C: {doc_id}",
-                    f"###C: REGISTER={register}",
+                    f"###C: REGISTER={register} in {language}",
                 ]
 
                 result_text = "\n".join(headers) + "\n" + conllu_text + "\n"
@@ -83,6 +103,10 @@ def process_chunk_gpu(task_data):
 
     except Exception as e:
         print(f"GPU {gpu_id}: Error processing chunk {chunk_idx}: {str(e)}")
+        print(f"Exception details: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
         # Return empty results if exception occurred
         return None, 0
 
@@ -104,6 +128,9 @@ def parse_language_data_gpu(language_code, n_gpus=8):
             f"WARNING: Only {available_gpus} GPUs available, using {available_gpus} instead of {n_gpus}"
         )
         n_gpus = available_gpus
+
+    # Print supported languages from Trankit
+    print(f"Supported languages in Trankit: {trankit.supported_langs}")
 
     # Input path
     input_path = (
