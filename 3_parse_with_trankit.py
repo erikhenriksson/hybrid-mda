@@ -1,11 +1,16 @@
 import argparse
-import gc  # Garbage collection for memory management
+import multiprocessing
 import os
 import sys
+
+import pandas as pd
+
+# Import multiprocessing with spawn
+multiprocessing.set_start_method("spawn", force=True)
+import gc  # Garbage collection for memory management
 import time
 from multiprocessing import Pool
 
-import pandas as pd
 import torch
 import trankit
 from trankit import trankit2conllu
@@ -299,6 +304,11 @@ def parse_language_data_gpu(language_code, n_gpus=8):
 
 
 def main():
+    # Critical: Set start method to 'spawn' for CUDA compatibility
+    # Must be done in the main entry point
+    if __name__ == "__main__":
+        multiprocessing.set_start_method("spawn", force=True)
+
     parser = argparse.ArgumentParser(
         description="Parse text data using Trankit with GPU acceleration"
     )
