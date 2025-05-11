@@ -1,10 +1,10 @@
 import argparse
 import os
 import sys
-from functools import partial
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool
 
 import pandas as pd
+import torch
 import trankit
 from tqdm import tqdm
 from trankit import trankit2conllu
@@ -12,11 +12,14 @@ from trankit import trankit2conllu
 from config import FILTERED_BY_MEDIAN_AND_STD_PATH, PARSED_CONLLU_PATH
 
 
-def process_chunk(chunk_data, language, chunk_idx, total_chunks):
-    """Process a chunk of data with trankit."""
+def process_chunk_gpu(chunk_data, language, gpu_id, chunk_idx, total_chunks):
+    """Process a chunk of data with trankit on a specific GPU."""
     try:
-        # Initialize trankit pipeline for this process
-        p = trankit.Pipeline(language)
+        # Set CUDA device for this process
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
+        # Initialize trankit pipeline with GPU
+        p = trankit.Pipeline(language, gpu=True)
 
         results = []
         for idx, row in chunk_data.iterrows():
@@ -46,11 +49,13 @@ def process_chunk(chunk_data, language, chunk_idx, total_chunks):
 
             except Exception as e:
                 # Log error but continue processing
-                print(f"Error processing row {idx}: {str(e)}")
+                print(f"GPU {gpu_id}: Error processing row {idx}: {str(e)}")
                 continue
 
         # Write chunk results to file
-        chunk_filename = f"chunk_{chunk_idx:04d}_of_{total_chunks:04d}.conllu"
+        chunk_filename = (
+            f"gpu_{gpu_id}_chunk_{chunk_idx:04d}_of_{total_chunks:04d}.conllu"
+        )
         chunk_path = os.path.join(PARSED_CONLLU_PATH, "temp_chunks", chunk_filename)
 
         os.makedirs(os.path.dirname(chunk_path), exist_ok=True)
@@ -58,20 +63,33 @@ def process_chunk(chunk_data, language, chunk_idx, total_chunks):
             for result in results:
                 f.write(result)
 
+        print(
+            f"GPU {gpu_id}: Completed chunk {chunk_idx}/{total_chunks} with {len(results)} documents"
+        )
         return chunk_path, len(results)
 
     except Exception as e:
-        print(f"Error processing chunk {chunk_idx}: {str(e)}")
+        print(f"GPU {gpu_id}: Error processing chunk {chunk_idx}: {str(e)}")
         return None, 0
 
 
-def parse_language_data(language_code, n_processes=None):
-    """Parse data for a specific language using multiprocessing."""
-    # Set number of processes
-    if n_processes is None:
-        n_processes = min(cpu_count(), 16)  # Cap at 16 to avoid overwhelming trankit
+def parse_language_data_gpu(language_code, n_gpus=8):
+    """Parse data for a specific language using multiple GPUs."""
+    print(f"Using {n_gpus} GPUs for parallel processing")
 
-    print(f"Using {n_processes} processes for parallel processing")
+    # Check GPU availability
+    if not torch.cuda.is_available():
+        print(
+            "ERROR: CUDA is not available. Please ensure you're running on a GPU node."
+        )
+        sys.exit(1)
+
+    available_gpus = torch.cuda.device_count()
+    if available_gpus < n_gpus:
+        print(
+            f"WARNING: Only {available_gpus} GPUs available, using {available_gpus} instead of {n_gpus}"
+        )
+        n_gpus = available_gpus
 
     # Input path
     input_path = (
@@ -84,52 +102,45 @@ def parse_language_data(language_code, n_processes=None):
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # Process in large chunks for multiprocessing
-    chunk_size = 50000  # Larger chunks for multiprocessing
+    # Process in chunks optimized for GPU processing
+    chunk_size = 10000  # Smaller chunks for GPU processing
 
     print(f"Reading input file: {input_path}")
     print("This might take a while for large files...")
 
-    # Create partial function with language and total chunks info
-    total_chunks = 0
-
     # First pass: count chunks
+    total_chunks = 0
     for i, _ in enumerate(pd.read_csv(input_path, sep="\t", chunksize=chunk_size)):
         total_chunks = i + 1
 
     print(f"File has {total_chunks} chunks of {chunk_size} rows each")
 
-    # Process chunks in parallel
+    # Process chunks with GPU assignment
     chunk_paths = []
     processed_rows = 0
 
-    # Create a partial function with fixed arguments
-    process_func = partial(
-        process_chunk, language=language_code, total_chunks=total_chunks
-    )
-
-    with Pool(processes=n_processes) as pool:
-        # Create iterator over chunks with indices
-        chunks_with_idx = []
+    # Create pool of GPU workers
+    with Pool(processes=n_gpus) as pool:
+        # Prepare chunks with GPU assignments
+        tasks = []
         for idx, chunk in enumerate(
             pd.read_csv(input_path, sep="\t", chunksize=chunk_size)
         ):
-            chunks_with_idx.append((chunk, idx))
+            gpu_id = idx % n_gpus  # Round-robin GPU assignment
+            tasks.append((chunk, language_code, gpu_id, idx, total_chunks))
 
         # Process chunks in parallel
         results = []
-        for chunk, chunk_idx in tqdm(
-            chunks_with_idx, desc="Processing chunks", total=total_chunks
-        ):
-            result = pool.apply_async(process_func, (chunk, chunk_idx))
+        for task in tqdm(tasks, desc="Processing chunks on GPUs", total=len(tasks)):
+            result = pool.apply_async(process_chunk_gpu, task)
             results.append(result)
 
         # Collect results
         for result in tqdm(results, desc="Collecting results", total=len(results)):
             try:
                 chunk_path, rows_processed = result.get(
-                    timeout=300
-                )  # 5 minute timeout per chunk
+                    timeout=600
+                )  # 10 minute timeout per chunk
                 if chunk_path:
                     chunk_paths.append(chunk_path)
                     processed_rows += rows_processed
@@ -173,16 +184,13 @@ def parse_language_data(language_code, n_processes=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Parse text data using Trankit to CoNLL-U format"
+        description="Parse text data using Trankit with GPU acceleration"
     )
     parser.add_argument(
         "language", help="Language code to process (e.g., en, fi, fr, sv)"
     )
     parser.add_argument(
-        "--processes",
-        type=int,
-        default=None,
-        help="Number of processes to use (default: auto-detect, max 16)",
+        "--gpus", type=int, default=8, help="Number of GPUs to use (default: 8)"
     )
 
     args = parser.parse_args()
@@ -194,10 +202,10 @@ def main():
         print(f"Supported languages: {', '.join(supported_languages)}")
         sys.exit(1)
 
-    print(f"\nStarting parsing for language: {args.language}")
+    print(f"\nStarting GPU-accelerated parsing for language: {args.language}")
 
     try:
-        results = parse_language_data(args.language, args.processes)
+        results = parse_language_data_gpu(args.language, args.gpus)
 
         print("\nParsing Summary:")
         print("================")
