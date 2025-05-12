@@ -195,11 +195,9 @@ def parse_language_data(
 
                     # Get register information if available
                     register = (
-                        str(row.get("register", "")).strip()
-                        if "register" in row
-                        else "IN"
+                        str(row.get("preds", "")).strip() if "preds" in row else "IN"
                     )
-                    register_lang = f"{register} {language_code}"
+                    register_lang = f"{register}"
 
                     if not text:
                         continue
