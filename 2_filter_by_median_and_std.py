@@ -137,10 +137,14 @@ def process_language_data(language_code):
                     ):
                         missing_categories.add(preds_key)
 
-                    # Clean text
-                    chunk_copy.at[idx, "text"] = re.sub(
-                        r"\s+", " ", str(row["text"])
-                    ).strip()
+                    # Clean text in all string columns to replace newlines
+                    for col in chunk_copy.columns:
+                        if pd.api.types.is_string_dtype(chunk_copy[col]) or isinstance(
+                            row[col], str
+                        ):
+                            chunk_copy.at[idx, col] = re.sub(
+                                r"\s+", " ", str(row[col])
+                            ).strip()
 
                     # Calculate text length
                     text_length = len(str(row["text"]).split())
