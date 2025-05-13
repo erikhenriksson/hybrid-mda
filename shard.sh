@@ -42,27 +42,32 @@ total_lines=$(wc -l < "$SRC_FILE")
 data_lines=$((total_lines - 1))
 echo "Total lines in file: $total_lines (excluding header: $data_lines)"
 
+# Calculate lines per shard (rounded up)
+lines_per_shard=$(( (data_lines + 31) / 32 ))
+echo "Will create shards with approximately $lines_per_shard lines each"
+
 # Create a temporary directory for the intermediate files
 TMP_DIR="tmp_shards_$LANG"
 mkdir -p "$TMP_DIR"
 
-# Split the file (excluding header) into 32 chunks
+# Split the file (excluding header) into chunks of roughly equal size
 echo "Splitting file into 32 shards..."
-tail -n +2 "$SRC_FILE" | split -n l/32 --numeric-suffixes=1 --suffix-length=2 - "$TMP_DIR/shard_${LANG}_"
+tail -n +2 "$SRC_FILE" | split -l "$lines_per_shard" - "$TMP_DIR/shard_${LANG}_"
 
 # Add the header to each shard
 echo "Adding header to each shard..."
-for i in $(seq -f "%02g" 1 32); do
-    shardfile="$TMP_DIR/shard_${LANG}_$i"
+shard_count=0
+for shardfile in "$TMP_DIR"/shard_${LANG}_*; do
     if [ -f "$shardfile" ]; then
-        outfile="$SHARD_DIR/${LANG}_shard_$i.tsv"
+        shard_count=$((shard_count + 1))
+        outfile="$SHARD_DIR/${LANG}_shard_$(printf "%02d" $shard_count).tsv"
         cat "header_$LANG.tsv" "$shardfile" > "$outfile"
         shard_lines=$(wc -l < "$outfile")
-        echo "Created shard $i: $outfile ($shard_lines lines)"
-    else
-        echo "Warning: Shard file not found: $shardfile"
+        echo "Created shard $shard_count: $outfile ($shard_lines lines)"
     fi
 done
+
+echo "Created $shard_count shards in total"
 
 # Clean up
 echo "Cleaning up temporary files..."
