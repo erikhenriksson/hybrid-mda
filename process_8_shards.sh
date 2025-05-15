@@ -44,24 +44,7 @@ source venv/bin/activate
 module use /appl/local/csc/modulefiles
 module load pytorch/2.0
 
-# Function to process a single shard
-process_shard() {
-    local lang=\$1
-    local shard=\$2
-    local gpu_id=\$3
-    
-    echo "[GPU \${gpu_id}] Processing \${lang} shard \${shard}..."
-    
-    # Set CUDA device for this task
-    export CUDA_VISIBLE_DEVICES=\${gpu_id}
-    
-    # Run the Python script
-    python parse_shard.py \${lang} \${shard} --gpu \${gpu_id}
-    
-    echo "[GPU \${gpu_id}] Completed \${lang} shard \${shard}"
-}
-
-# Process 8 shards in parallel using srun
+# Launch 8 tasks in parallel, each on its own GPU
 for i in {0..7}; do
     shard_num=\$((${START_SHARD} + i))
     
@@ -70,9 +53,9 @@ for i in {0..7}; do
         break
     fi
     
-    # Launch task in background
+    # Run the Python script with the assigned GPU
     srun --ntasks=1 --gres=gpu:mi250:1 --cpus-per-task=4 --exact \
-         bash -c "process_shard ${LANG} \${shard_num} \$i" &
+         python parse_shard.py ${LANG} \$shard_num --gpu \$i &
     
     # Small delay to avoid race conditions
     sleep 1
