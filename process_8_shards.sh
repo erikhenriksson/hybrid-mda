@@ -31,7 +31,7 @@ cat > $JOB_SCRIPT << EOL
 #SBATCH --ntasks=8
 #SBATCH --mem=128G
 #SBATCH --cpus-per-task=4
-#SBATCH --time=24:00:00
+#SBATCH --time=00:30:00
 #SBATCH --output=${LOGS_DIR}/%j.out
 #SBATCH --error=${LOGS_DIR}/%j.err
 #SBATCH --account=project_462000353
