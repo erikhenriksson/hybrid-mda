@@ -10,20 +10,14 @@ from trankit import trankit2conllu
 LANGUAGE_MAP = {"en": "english", "fi": "finnish", "fr": "french", "sv": "swedish"}
 
 
-def process_shard(language_code, shard_num, gpu_id=None):
+def process_shard(language_code, shard_num):
     """
     Process a single shard of data using Trankit.
 
     Args:
         language_code: Two-letter language code (en, fi, fr, sv)
         shard_num: Shard number to process (01-32)
-        gpu_id: GPU ID to use (or None for CPU)
     """
-    # Set GPU if specified
-    if gpu_id is not None:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-        print(f"Using GPU {gpu_id} for processing")
-
     # Map language code to Trankit language name
     trankit_language = LANGUAGE_MAP.get(language_code)
 
@@ -36,6 +30,10 @@ def process_shard(language_code, shard_num, gpu_id=None):
     output_dir = f"data/parsed/{language_code}"
     os.makedirs(output_dir, exist_ok=True)
     output_path = f"{output_dir}/shard_{shard_num:02d}.conllu"
+
+    # Report CUDA device information
+    if "CUDA_VISIBLE_DEVICES" in os.environ:
+        print(f"Using GPU: {os.environ['CUDA_VISIBLE_DEVICES']}")
 
     print(
         f"Processing {language_code} (shard {shard_num}) with {trankit_language} model"
@@ -101,14 +99,11 @@ def main():
     parser.add_argument(
         "shard", type=int, choices=range(1, 33), help="Shard number to process (1-32)"
     )
-    parser.add_argument(
-        "--gpu", type=int, default=None, help="GPU ID to use (default: None for CPU)"
-    )
 
     args = parser.parse_args()
 
     try:
-        process_shard(args.language, args.shard, args.gpu)
+        process_shard(args.language, args.shard)
         print(f"✓ Successfully processed {args.language} shard {args.shard}")
     except Exception as e:
         print(f"✗ Error processing {args.language} shard {args.shard}: {str(e)}")

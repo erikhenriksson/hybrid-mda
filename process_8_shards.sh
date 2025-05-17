@@ -16,10 +16,12 @@ if [ $END_SHARD -gt 32 ]; then
     END_SHARD=32
 fi
 
+NUM_SHARDS=$((END_SHARD - START_SHARD + 1))
+
 echo "Processing shards $START_SHARD to $END_SHARD for language $LANG"
 
 # Create a temporary job script
-JOB_SCRIPT="srun_${LANG}_${START_SHARD}_${END_SHARD}.sh"
+JOB_SCRIPT="batch_${LANG}_${START_SHARD}_${END_SHARD}.sh"
 LOGS_DIR="slurm-logs"
 mkdir -p $LOGS_DIR
 
@@ -27,15 +29,15 @@ cat > $JOB_SCRIPT << EOL
 #!/bin/bash
 #SBATCH --job-name=trankit_${LANG}
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:mi250:8
-#SBATCH --ntasks=8
-#SBATCH --mem=128G
+#SBATCH --gres=gpu:mi250:1
+#SBATCH --mem=16G
 #SBATCH --cpus-per-task=4
-#SBATCH --time=00:30:00
-#SBATCH --output=${LOGS_DIR}/%j.out
-#SBATCH --error=${LOGS_DIR}/%j.err
+#SBATCH --time=24:00:00
+#SBATCH --output=${LOGS_DIR}/%A_%a.out
+#SBATCH --error=${LOGS_DIR}/%A_%a.err
 #SBATCH --account=project_462000353
 #SBATCH --partition=small-g
+#SBATCH --array=0-$((NUM_SHARDS-1))
 
 # Load environment
 source venv/bin/activate
@@ -44,34 +46,21 @@ source venv/bin/activate
 module use /appl/local/csc/modulefiles
 module load pytorch/2.0
 
-# Launch 8 tasks in parallel, each on its own GPU
-for i in {0..7}; do
-    shard_num=\$((${START_SHARD} + i))
-    
-    # Check if we've exceeded the end shard
-    if [ \$shard_num -gt ${END_SHARD} ]; then
-        break
-    fi
-    
-    # Run the Python script with the assigned GPU
-    srun --ntasks=1 --gres=gpu:mi250:1 --cpus-per-task=4 --exact \
-         python parse_shard.py ${LANG} \$shard_num --gpu \$i &
-    
-    # Small delay to avoid race conditions
-    sleep 1
-done
+# Calculate which shard to process based on array task ID
+SHARD_NUM=\$((${START_SHARD} + SLURM_ARRAY_TASK_ID))
+echo "Processing ${LANG} shard \${SHARD_NUM}"
 
-# Wait for all background tasks to complete
-wait
+# Run the Python script
+python parse_shard.py ${LANG} \${SHARD_NUM}
 
-echo "All shards ${START_SHARD}-${END_SHARD} for ${LANG} completed!"
+echo "Completed processing ${LANG} shard \${SHARD_NUM}"
 EOL
 
 # Make the script executable
 chmod +x $JOB_SCRIPT
 
 # Submit the job
-echo "Submitting job to process shards $START_SHARD-$END_SHARD for $LANG"
+echo "Submitting job array to process shards $START_SHARD-$END_SHARD for $LANG"
 sbatch $JOB_SCRIPT
 
 echo "Job submitted. Check logs directory for progress."
