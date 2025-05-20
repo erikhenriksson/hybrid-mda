@@ -22,7 +22,8 @@ cat > $JOB_SCRIPT << EOL
 #SBATCH --job-name=trankit_${LANG}
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:mi250:8
 #SBATCH --mem=128G
 #SBATCH --time=24:00:00
 #SBATCH --output=${LOGS_DIR}/%j.out
@@ -44,7 +45,7 @@ for i in \$(seq 0 7); do
     SHARD_NUM=\$((${START_SHARD} + i))
     if [ \$SHARD_NUM -le ${END_SHARD} ]; then
         echo "Starting process for ${LANG} shard \${SHARD_NUM}"
-        srun --ntasks=1 --gres=gpu:mi250:1 --mem=16G --cpu-bind=none --gpu-bind=none \
+        srun --ntasks=1 --gres=gpu:mi250:1 --mem=16G \
             python parse_shard.py ${LANG} \${SHARD_NUM} > ${LOGS_DIR}/${LANG}_shard_\${SHARD_NUM}.log 2>&1 &
     fi
 done
