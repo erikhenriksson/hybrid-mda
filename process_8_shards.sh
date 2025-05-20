@@ -27,9 +27,9 @@ cat > $JOB_SCRIPT << EOL
 #SBATCH --job-name=trankit_${LANG}
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=8  # Request all 8 GPUs on the node
-#SBATCH --mem=64G
+#SBATCH --mem=16G
 #SBATCH --ntasks-per-node=8
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=8
 #SBATCH --time=24:00:00
 #SBATCH --output=${LOGS_DIR}/%j.out
 #SBATCH --error=${LOGS_DIR}/%j.err
