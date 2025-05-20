@@ -29,7 +29,7 @@ cat > $JOB_SCRIPT << EOL
 #SBATCH --gres=gpu:mi250:8
 #SBATCH --mem=128G
 #SBATCH --ntasks-per-node=8
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=4
 #SBATCH --time=24:00:00
 #SBATCH --output=${LOGS_DIR}/%j.out
 #SBATCH --error=${LOGS_DIR}/%j.err
