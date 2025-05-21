@@ -21,11 +21,11 @@ cat > $JOB_SCRIPT << EOL
 #!/bin/bash
 #SBATCH --job-name=trankit_${LANG}
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
+#SBATCH --ntasks=8
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:mi250:8
 #SBATCH --mem=128G
-#SBATCH --time=24:00:00
+#SBATCH --time=32:00:00
 #SBATCH --output=${LOGS_DIR}/%j.out
 #SBATCH --error=${LOGS_DIR}/%j.err
 #SBATCH --account=project_462000353
