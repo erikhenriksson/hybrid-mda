@@ -1,6 +1,8 @@
 import os
 
-os.environ["HF_HOME"] = ".cache/huggingface"  # Set Hugging Face cache directory
+os.environ["TORCH_HOME"] = ".cache/torch"
+os.environ["HF_HOME"] = ".cache/huggingface"
+os.environ["TRANSFORMERS_CACHE"] = ".cache/transformers"
 import re
 import sys
 
