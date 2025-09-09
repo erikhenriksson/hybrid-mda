@@ -1,8 +1,14 @@
 import os
 
-os.environ["TORCH_HOME"] = ".cache/torch"
-os.environ["HF_HOME"] = ".cache/huggingface"
-os.environ["TRANSFORMERS_CACHE"] = ".cache/transformers"
+# Set cache directories FIRST - before importing torch/transformers/detoxify
+os.environ['TORCH_HOME'] = '/scratch/project_2002026/ehenriks/.cache'
+os.environ['HF_HOME'] = '/scratch/project_2002026/ehenriks/.cache'
+os.environ['TRANSFORMERS_CACHE'] = '/scratch/project_2002026/ehenriks/.cache'
+os.environ['HF_DATASETS_CACHE'] = '/scratch/project_2002026/ehenriks/.cache'
+
+# Create cache directory if it doesn't exist
+os.makedirs('/scratch/project_2002026/ehenriks/.cache', exist_ok=True)
+
 import re
 import sys
 
