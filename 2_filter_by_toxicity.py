@@ -8,6 +8,8 @@ from transformers import AutoTokenizer
 
 from config import FILTERED_BY_MIN_LENGTH_PATH, FILTERED_BY_TOXICITY_PATH
 
+print("Loading models and functions...")
+
 
 def read_hplt_file(file_path, sep, chunk_size):
     """Read TSV file in chunks"""
@@ -40,7 +42,7 @@ def fix_label(preds_in_list_from_chunk):
 
     for pred in preds_in_list_from_chunk:
         # Remove line breaks before parsing
-        pred_clean = pred.replace("\n", "")
+        pred_clean = pred.replace("\n", "").replace("\r", "")
         # Parse string representation of list to actual list
         pred_list = eval(pred_clean)
 
@@ -48,7 +50,8 @@ def fix_label(preds_in_list_from_chunk):
         processed_parts = [
             part.lower() if part in subregs else part for part in pred_list
         ]
-        fixed_labels.append("_".join(processed_parts))
+        # Convert back to string representation of list
+        fixed_labels.append(str(processed_parts))
 
     return fixed_labels
 
