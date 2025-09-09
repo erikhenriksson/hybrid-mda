@@ -1,7 +1,11 @@
-STATS_PATH = "/scratch/project_462000353/tlundber/umap-embeddings/register-distribution-results-th-optimised"
-RAW_DATA_PATH = "/scratch/project_462000353/tlundber/umap-embeddings/data/model_embeds/cleaned/bge-m3-fold-6/th-optimised"
-FILTERED_BY_MEDIAN_AND_STD_PATH = "filtered_by_median_and_std"
-FILTERED_BY_MIN_LENGTH_PATH = "filtered_by_min_length"
-PARSED_CONLLU_PATH = "parsed_conllu"
-
-MIN_TEXT_LENGTH = 75
+RAW_DATA_PATH = "/scratch/project_2002026/data/th-optimised"
+FILTERED_BY_MIN_LENGTH_PATH = (
+    "/scratch/project_2002026/data/th-optimised/new/data/filtered_by_min_length_500"
+)
+FILTERED_BY_TOXICITY_PATH = (
+    "/scratch/project_2002026/data/th-optimised/new/data/filtered_by_toxicity"
+)
+STATS_AFTER_FILTERING_BY_TOXICITY_PATH = ""
+FILTERED_BY_MEDIAN_AND_STD_PATH = ""
+PARSED_CONLLU_PATH = ""
+MIN_TEXT_LENGTH = 500

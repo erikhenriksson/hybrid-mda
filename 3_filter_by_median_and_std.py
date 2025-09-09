@@ -38,7 +38,7 @@ def load_stats_file(stats_path):
         preds_key_str = str(preds_key)
 
         stats_dict[preds_key_str] = {
-            "mean": row["mean"],
+            "median": row["median"],
             "std": row.get("std", 0),  # Handle cases where std might be missing
         }
 
@@ -63,13 +63,13 @@ def convert_preds_to_key(preds_value):
 
 
 def process_language_data(language_code):
-    """Process data for a specific language in chunks with mean +- 1 std filtering."""
+    """Process data for a specific language in chunks with median +- 1 std filtering."""
     # Input path (already filtered by minimum length)
     input_path = (
         f"data/{FILTERED_BY_MIN_LENGTH_PATH}/{language_code}_embeds_filtered.tsv"
     )
 
-    # Output path for mean ± std filtering
+    # Output path for median ± std filtering
     output_path = (
         f"data/{FILTERED_BY_MEDIAN_AND_STD_PATH}/{language_code}_embeds_filtered.tsv"
     )
@@ -151,10 +151,10 @@ def process_language_data(language_code):
 
                     # Determine if row should be kept
                     if preds_key in stats_dict:
-                        mean = stats_dict[preds_key]["mean"]
+                        median = stats_dict[preds_key]["median"]
                         std = stats_dict[preds_key]["std"]
-                        lower_bound = max(0, mean - std)
-                        upper_bound = mean + std
+                        lower_bound = max(0, median - std)
+                        upper_bound = median + std
                         keep_rows.append(lower_bound <= text_length <= upper_bound)
                     else:
                         keep_rows.append(False)
