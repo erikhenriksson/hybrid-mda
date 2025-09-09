@@ -17,6 +17,7 @@ os.makedirs(cache_dir, exist_ok=True)
 # Also change HOME temporarily to avoid any fallback to user directory
 original_home = os.environ.get("HOME")
 os.environ["HOME"] = "/scratch/project_2002026/ehenriks"
+
 import time
 
 import pandas as pd
@@ -120,9 +121,10 @@ def process_file(file_path, output_path, detoxify_model, tokenizer, use_keywords
 
     sep = "\t"
     chunk_size = 10000
-    clean_data = []
     total_processed = 0
     filtered_count = 0
+    clean_count = 0
+    first_chunk = True
 
     for data_chunk in read_hplt_file(file_path, sep, chunk_size):
         # Clean line breaks from preds column
@@ -135,6 +137,8 @@ def process_file(file_path, output_path, detoxify_model, tokenizer, use_keywords
 
         # Remove machine translated texts
         no_mt_chunk = data_chunk[~data_chunk["preds"].str.contains("MT", na=False)]
+
+        chunk_clean_data = []
 
         for i, row in no_mt_chunk.iterrows():
             text = row["text"]
@@ -149,32 +153,48 @@ def process_file(file_path, output_path, detoxify_model, tokenizer, use_keywords
                 should_filter = True
 
             if not should_filter:
-                # Keep this text - add to clean data
-                clean_data.append(row)
+                # Keep this text - add to chunk clean data
+                chunk_clean_data.append(row)
+                clean_count += 1
             else:
                 filtered_count += 1
 
             total_processed += 1
 
             if total_processed % 100 == 0:
-                print(f"Processed {total_processed} texts, filtered {filtered_count}")
+                print(
+                    f"Processed {total_processed} texts, filtered {filtered_count}, clean {clean_count}"
+                )
 
-    # Save clean data to output file
-    if clean_data:
-        clean_df = pd.DataFrame(clean_data)
-        # Remove line breaks from all text columns when saving
-        for col in clean_df.select_dtypes(include=[object]).columns:
-            clean_df[col] = (
-                clean_df[col].astype(str).str.replace("\n", " ").str.replace("\r", " ")
+        # Save this chunk's clean data incrementally
+        if chunk_clean_data:
+            chunk_clean_df = pd.DataFrame(chunk_clean_data)
+            # Remove line breaks from all text columns
+            for col in chunk_clean_df.select_dtypes(include=[object]).columns:
+                chunk_clean_df[col] = (
+                    chunk_clean_df[col]
+                    .astype(str)
+                    .str.replace("\n", " ")
+                    .str.replace("\r", " ")
+                )
+
+            # Write header only for first chunk, append for subsequent chunks
+            chunk_clean_df.to_csv(
+                output_path,
+                sep="\t",
+                index=False,
+                mode="w" if first_chunk else "a",
+                header=first_chunk,
             )
+            first_chunk = False
 
-        clean_df.to_csv(output_path, sep="\t", index=False)
-        print(f"Saved {len(clean_data)} clean texts to {output_path}")
+            print(f"Saved {len(chunk_clean_data)} clean texts from current chunk")
 
     print(
-        f"Total processed: {total_processed}, Filtered: {filtered_count}, Clean: {len(clean_data)}"
+        f"Total processed: {total_processed}, Filtered: {filtered_count}, Clean: {clean_count}"
     )
-    return len(clean_data), filtered_count
+    print(f"Final output saved to: {output_path}")
+    return clean_count, filtered_count
 
 
 # Set up GPU if available
