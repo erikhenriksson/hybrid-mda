@@ -1,4 +1,6 @@
 import os
+
+os.environ["HF_HOME"] = ".cache/huggingface"  # Set Hugging Face cache directory
 import re
 import sys
 
