@@ -18,6 +18,7 @@ os.makedirs(cache_dir, exist_ok=True)
 original_home = os.environ.get("HOME")
 os.environ["HOME"] = "/scratch/project_2002026/ehenriks"
 
+import ast  # Safer alternative to eval()
 import time
 
 import pandas as pd
@@ -62,15 +63,22 @@ def fix_label(preds_in_list_from_chunk):
     for pred in preds_in_list_from_chunk:
         # Remove line breaks before parsing
         pred_clean = pred.replace("\n", "").replace("\r", "")
-        # Parse string representation of list to actual list
-        pred_list = eval(pred_clean)
+        # Parse string representation of list to actual list - using ast.literal_eval for safety
+        try:
+            pred_list = ast.literal_eval(pred_clean)
+        except (ValueError, SyntaxError):
+            # If parsing fails, keep original value
+            pred_list = pred_clean
 
         # Convert subregs to lowercase, keep others as-is
-        processed_parts = [
-            part.lower() if part in subregs else part for part in pred_list
-        ]
-        # Convert back to string representation of list
-        fixed_labels.append(str(processed_parts))
+        if isinstance(pred_list, list):
+            processed_parts = [
+                part.lower() if part in subregs else part for part in pred_list
+            ]
+            # Convert back to string representation of list
+            fixed_labels.append(str(processed_parts))
+        else:
+            fixed_labels.append(str(pred_list))
 
     return fixed_labels
 
@@ -98,8 +106,37 @@ def get_max_toxicity(text, detoxify_model, tokenizer):
     return max(max(scores) for scores in toxic_scores.values())
 
 
-def process_file(file_path, output_path, detoxify_model, tokenizer, use_keywords=False):
-    """Process a single file with toxicity filtering"""
+def save_chunk_data(data, output_path, is_first_chunk):
+    """Save chunk data to file with proper formatting"""
+    if data:
+        chunk_df = pd.DataFrame(data)
+        # Remove line breaks from all text columns
+        for col in chunk_df.select_dtypes(include=[object]).columns:
+            chunk_df[col] = (
+                chunk_df[col].astype(str).str.replace("\n", " ").str.replace("\r", " ")
+            )
+
+        # Write header only for first chunk, append for subsequent chunks
+        chunk_df.to_csv(
+            output_path,
+            sep="\t",
+            index=False,
+            mode="w" if is_first_chunk else "a",
+            header=is_first_chunk,
+        )
+        return len(data)
+    return 0
+
+
+def process_file(
+    file_path,
+    clean_output_path,
+    toxic_output_path,
+    detoxify_model,
+    tokenizer,
+    use_keywords=False,
+):
+    """Process a single file with toxicity filtering and save both clean and toxic texts"""
     print(f"Processing {file_path}...")
 
     # Swedish keyword list (only used for Swedish files)
@@ -124,7 +161,10 @@ def process_file(file_path, output_path, detoxify_model, tokenizer, use_keywords
     total_processed = 0
     filtered_count = 0
     clean_count = 0
-    first_chunk = True
+
+    # Track first chunk for both files
+    first_clean_chunk = True
+    first_toxic_chunk = True
 
     for data_chunk in read_hplt_file(file_path, sep, chunk_size):
         # Clean line breaks from preds column
@@ -139,24 +179,37 @@ def process_file(file_path, output_path, detoxify_model, tokenizer, use_keywords
         no_mt_chunk = data_chunk[~data_chunk["preds"].str.contains("MT", na=False)]
 
         chunk_clean_data = []
+        chunk_toxic_data = []
 
         for i, row in no_mt_chunk.iterrows():
             text = row["text"]
             max_toxicity = get_max_toxicity(text, detoxify_model, tokenizer)
 
             should_filter = False
+            filter_reason = ""
 
             # Apply filtering logic based on language
             if max_toxicity > 0.5:
                 should_filter = True
+                filter_reason = "toxicity"
             elif use_keywords and has_keywords(text, keywords):
                 should_filter = True
+                filter_reason = "keywords"
+
+            # Add filter reason to row for toxic file
+            row_with_reason = row.copy()
+            row_with_reason["filter_reason"] = (
+                filter_reason if should_filter else "clean"
+            )
+            row_with_reason["toxicity_score"] = max_toxicity
 
             if not should_filter:
-                # Keep this text - add to chunk clean data
+                # Keep this text - add to clean data
                 chunk_clean_data.append(row)
                 clean_count += 1
             else:
+                # Filtered text - add to toxic data
+                chunk_toxic_data.append(row_with_reason)
                 filtered_count += 1
 
             total_processed += 1
@@ -166,34 +219,27 @@ def process_file(file_path, output_path, detoxify_model, tokenizer, use_keywords
                     f"Processed {total_processed} texts, filtered {filtered_count}, clean {clean_count}"
                 )
 
-        # Save this chunk's clean data incrementally
-        if chunk_clean_data:
-            chunk_clean_df = pd.DataFrame(chunk_clean_data)
-            # Remove line breaks from all text columns
-            for col in chunk_clean_df.select_dtypes(include=[object]).columns:
-                chunk_clean_df[col] = (
-                    chunk_clean_df[col]
-                    .astype(str)
-                    .str.replace("\n", " ")
-                    .str.replace("\r", " ")
-                )
+        # Save clean data
+        saved_clean = save_chunk_data(
+            chunk_clean_data, clean_output_path, first_clean_chunk
+        )
+        if saved_clean > 0:
+            first_clean_chunk = False
+            print(f"Saved {saved_clean} clean texts from current chunk")
 
-            # Write header only for first chunk, append for subsequent chunks
-            chunk_clean_df.to_csv(
-                output_path,
-                sep="\t",
-                index=False,
-                mode="w" if first_chunk else "a",
-                header=first_chunk,
-            )
-            first_chunk = False
-
-            print(f"Saved {len(chunk_clean_data)} clean texts from current chunk")
+        # Save toxic data
+        saved_toxic = save_chunk_data(
+            chunk_toxic_data, toxic_output_path, first_toxic_chunk
+        )
+        if saved_toxic > 0:
+            first_toxic_chunk = False
+            print(f"Saved {saved_toxic} toxic texts from current chunk")
 
     print(
         f"Total processed: {total_processed}, Filtered: {filtered_count}, Clean: {clean_count}"
     )
-    print(f"Final output saved to: {output_path}")
+    print(f"Clean texts saved to: {clean_output_path}")
+    print(f"Toxic texts saved to: {toxic_output_path}")
     return clean_count, filtered_count
 
 
@@ -225,7 +271,13 @@ start_time = time.time()
 # Process each file
 for filename, use_keywords in files_to_process:
     input_path = os.path.join(input_dir, filename)
-    output_path = os.path.join(output_dir, filename)
+
+    # Extract language code from filename
+    lang_code = filename.split("_")[0]
+
+    # Create output paths for both clean and toxic files
+    clean_output_path = os.path.join(output_dir, f"{lang_code}_embeds_clean.tsv")
+    toxic_output_path = os.path.join(output_dir, f"{lang_code}_embeds_toxic.tsv")
 
     if os.path.exists(input_path):
         language = "Swedish" if filename.startswith("sv") else "French"
@@ -233,11 +285,16 @@ for filename, use_keywords in files_to_process:
         print(f"\n--- Processing {language} file with {filter_type} ---")
 
         clean_count, filtered_count = process_file(
-            input_path, output_path, detoxify_model, tokenizer, use_keywords
+            input_path,
+            clean_output_path,
+            toxic_output_path,
+            detoxify_model,
+            tokenizer,
+            use_keywords,
         )
 
         print(
-            f"{language} results: {clean_count} clean texts saved, {filtered_count} filtered out"
+            f"{language} results: {clean_count} clean texts saved, {filtered_count} filtered texts saved"
         )
     else:
         print(f"Warning: {input_path} not found, skipping...")
@@ -248,4 +305,6 @@ total_time = end_time - start_time
 print(f"\n--- FINAL RESULTS ---")
 print(f"Total processing time: {total_time:.2f} seconds")
 print(f"Output files saved to: {output_dir}")
+print("Clean files: *_embeds_clean.tsv")
+print("Toxic files: *_embeds_toxic.tsv")
 print("Done!")
