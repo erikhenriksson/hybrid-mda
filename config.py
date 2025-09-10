@@ -3,7 +3,7 @@ FILTERED_BY_MIN_LENGTH_PATH = (
     "/scratch/project_2002026/data/th-optimised/new/data/filtered_by_min_length_500"
 )
 FILTERED_BY_TOXICITY_PATH = (
-    "/scratch/project_2002026/data/th-optimised/new/data/filtered_by_toxicity"
+    "/scratch/project_2002026/data/th-optimised/new/data/filtered_by_min_length_500_and_toxicity"
 )
 STATS_AFTER_FILTERING_BY_TOXICITY_PATH = ""
 FILTERED_BY_MEDIAN_AND_STD_PATH = ""
