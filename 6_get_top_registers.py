@@ -213,7 +213,7 @@ def sample_registers_incrementally(
 
 def process_language_sampling(language_code: str) -> Dict[str, Any]:
     """Process sampling for a specific language."""
-    stats_path = f"{STATS_AFTER_FILTERING_BY_MEDIAN_AND_STD_PATH}/{language_code}_embeds_clean.tsv"
+    stats_path = f"{STATS_AFTER_FILTERING_BY_MEDIAN_AND_STD_PATH}/{language_code}_embeds_clean_filtered.tsv"
 
     try:
         # Load and analyze stats to get top registers
