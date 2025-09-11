@@ -1,6 +1,5 @@
 import argparse
 import os
-import re
 import sys
 from collections import defaultdict
 
@@ -15,10 +14,8 @@ def generate_filtered_stats(input_dir, language_codes=None):
 
     Args:
         input_dir: Directory containing filtered data files
-        language_codes: List of language codes to process, defaults to ['en', 'fi', 'fr', 'sv']
+        language_codes: List of language codes to process, defaults to ['fr', 'sv']
     """
-    if language_codes is None:
-        language_codes = ["en", "fi", "fr", "sv"]
 
     # Extract the base directory name to use in output path
     base_dir_name = os.path.basename(input_dir)
@@ -27,7 +24,7 @@ def generate_filtered_stats(input_dir, language_codes=None):
         print(f"\nProcessing filtered data for {lang}...")
 
         # Construct filtered data path
-        filtered_path = os.path.join(input_dir, f"{lang}_embeds_filtered.tsv")
+        filtered_path = os.path.join(input_dir, f"{lang}_embeds_clean.tsv")
 
         if not os.path.exists(filtered_path):
             print(f"Filtered file not found: {filtered_path}")
@@ -35,7 +32,7 @@ def generate_filtered_stats(input_dir, language_codes=None):
 
         # Output path for statistics - keep same directory structure
         output_stats_path = os.path.join(
-            "reports", base_dir_name, f"{lang}_embeds_filtered.tsv"
+            "reports", base_dir_name, f"{lang}_embeds_clean.tsv"
         )
 
         # Ensure output directory exists
@@ -71,14 +68,15 @@ def process_filtered_file(filtered_path, output_stats_path, lang):
             # Process each row in the chunk
             for _, row in chunk.iterrows():
                 # Get prediction category and convert to a consistent format
-                preds_value = row["preds"]
+                preds_value = row["fixed_register"]
 
                 # Handle different formats
                 if isinstance(preds_value, str):
                     try:
                         preds_value = eval(preds_value)
                     except:
-                        pass
+                        print(f"Warning: Could not evaluate preds_value: {preds_value}")
+                        exit()
 
                 # Convert to tuple for hashability if it's a list
                 if isinstance(preds_value, list):
@@ -158,7 +156,7 @@ def main():
     args = parser.parse_args()
 
     # Default language codes
-    language_codes = ["en", "fi", "fr", "sv"]
+    language_codes = ["fr", "sv"]
 
     # Process all language files
     generate_filtered_stats(args.input_dir, language_codes)
