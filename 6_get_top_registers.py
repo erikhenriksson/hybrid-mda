@@ -58,31 +58,25 @@ def load_and_analyze_stats(stats_path: str) -> Tuple[List[str], Dict[str, int]]:
         if preds_value == () or key == "()":
             empty_tuple_key = key
 
-    # Sort by count (descending)
+    # Sort by count (descending) and get top 30
     sorted_registers = sorted(register_counts.items(), key=lambda x: x[1], reverse=True)
+    top_30_keys = [key for key, count in sorted_registers[:30]]
 
-    # Get top 30 NON-EMPTY categories (exclude empty tuple from top 30)
-    non_empty_registers = [
-        (key, count) for key, count in sorted_registers if key != empty_tuple_key
-    ]
-    top_30_non_empty = non_empty_registers[:30]
-    top_30_keys = [key for key, count in top_30_non_empty]
-
-    print(f"Top 30 NON-EMPTY registers by frequency:")
-    for i, (key, count) in enumerate(top_30_non_empty, 1):
+    print(f"Top 30 registers by frequency:")
+    for i, (key, count) in enumerate(sorted_registers[:30], 1):
         print(f"  {i:2d}. {key}: {count:,} examples")
 
-    # Always add empty tuple category as the 31st category
+    # Add empty tuple category if it exists
     selected_keys = top_30_keys.copy()
-    if empty_tuple_key:
+    if empty_tuple_key and empty_tuple_key not in selected_keys:
         selected_keys.append(empty_tuple_key)
         print(
-            f"\nAdding empty tuple category as #31: {empty_tuple_key} ({register_counts[empty_tuple_key]:,} examples)"
+            f"\nAdding empty tuple category: {empty_tuple_key} ({register_counts[empty_tuple_key]:,} examples)"
         )
+    elif empty_tuple_key:
+        print(f"\nEmpty tuple category already in top 30: {empty_tuple_key}")
     else:
         print(f"\nWarning: No empty tuple category found in stats!")
-
-    print(f"\nTotal selected categories: {len(selected_keys)} (30 non-empty + 1 empty)")
 
     return selected_keys, register_counts
 
