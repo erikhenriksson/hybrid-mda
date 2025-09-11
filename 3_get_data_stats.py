@@ -7,8 +7,10 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from config import FILTERED_BY_TOXICITY_PATH, STATS_AFTER_FILTERING_BY_TOXICITY_PATH
 
-def generate_filtered_stats(input_dir, language_codes=None):
+
+def generate_filtered_stats(language_codes=None):
     """
     Generate statistics from filtered data files.
 
@@ -16,6 +18,8 @@ def generate_filtered_stats(input_dir, language_codes=None):
         input_dir: Directory containing filtered data files
         language_codes: List of language codes to process, defaults to ['fr', 'sv']
     """
+
+    input_dir = FILTERED_BY_TOXICITY_PATH
 
     # Extract the base directory name to use in output path
     base_dir_name = os.path.basename(input_dir)
@@ -32,7 +36,7 @@ def generate_filtered_stats(input_dir, language_codes=None):
 
         # Output path for statistics - keep same directory structure
         output_stats_path = os.path.join(
-            "reports", base_dir_name, f"{lang}_embeds_clean.tsv"
+            STATS_AFTER_FILTERING_BY_TOXICITY_PATH, f"{lang}_embeds_clean.tsv"
         )
 
         # Ensure output directory exists
@@ -147,19 +151,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate statistics from filtered text data"
     )
-    parser.add_argument(
-        "input_dir",
-        type=str,
-        help="Directory containing filtered data files (e.g., data/filtered_by_min_length)",
-    )
-
-    args = parser.parse_args()
 
     # Default language codes
     language_codes = ["fr", "sv"]
 
     # Process all language files
-    generate_filtered_stats(args.input_dir, language_codes)
+    generate_filtered_stats(language_codes)
 
     print("\nProcessing Complete")
 
