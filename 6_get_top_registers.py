@@ -1,10 +1,7 @@
 import ast
 import os
-import re
-import sys
 from typing import Any, Dict, List, Tuple
 
-import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -15,13 +12,12 @@ from config import (
 )
 
 
-def load_and_analyze_stats(stats_path: str) -> Tuple[List[str], Dict[str, int]]:
+def load_and_get_top_registers(stats_path: str) -> List[str]:
     """
     Load stats file and return top 30 register categories plus empty tuple category.
 
     Returns:
-        - List of selected register keys (top 30 + empty tuple)
-        - Dictionary mapping register keys to their counts
+        List of selected register keys (top 30 + empty tuple)
     """
     try:
         stats_df = pd.read_csv(stats_path, sep="\t")
@@ -30,55 +26,50 @@ def load_and_analyze_stats(stats_path: str) -> Tuple[List[str], Dict[str, int]]:
         print(f"Error loading stats file {stats_path}: {str(e)}")
         raise
 
-    # Create register counts dictionary
-    register_counts = {}
+    # Create register counts list for sorting
+    register_data = []
     empty_tuple_key = None
 
     for _, row in stats_df.iterrows():
         preds_value = row["preds"]
         count = row["count"]
 
-        # Convert preds to consistent format
+        # Parse tuple from string format
         if isinstance(preds_value, str):
-            try:
-                preds_value = ast.literal_eval(preds_value)
-            except (ValueError, SyntaxError):
-                # If evaluation fails, keep as string
-                pass
+            preds_value = ast.literal_eval(preds_value)
 
-        # Convert to tuple for consistency
-        if isinstance(preds_value, list):
-            preds_value = tuple(preds_value)
-
-        # Convert to string key for consistent lookup
+        # Use the tuple directly as key (convert to string for dict lookup)
         key = str(preds_value)
-        register_counts[key] = count
+        register_data.append((key, count))
 
         # Check for empty tuple
         if preds_value == () or key == "()":
             empty_tuple_key = key
 
     # Sort by count (descending) and get top 30
-    sorted_registers = sorted(register_counts.items(), key=lambda x: x[1], reverse=True)
-    top_30_keys = [key for key, count in sorted_registers[:30]]
+    register_data.sort(key=lambda x: x[1], reverse=True)
+    top_30_keys = [key for key, count in register_data[:30]]
 
     print(f"Top 30 registers by frequency:")
-    for i, (key, count) in enumerate(sorted_registers[:30], 1):
+    for i, (key, count) in enumerate(register_data[:30], 1):
         print(f"  {i:2d}. {key}: {count:,} examples")
 
-    # Add empty tuple category if it exists
+    # Add empty tuple category if it exists and not already in top 30
     selected_keys = top_30_keys.copy()
     if empty_tuple_key and empty_tuple_key not in selected_keys:
         selected_keys.append(empty_tuple_key)
+        empty_count = next(
+            (count for key, count in register_data if key == empty_tuple_key), 0
+        )
         print(
-            f"\nAdding empty tuple category: {empty_tuple_key} ({register_counts[empty_tuple_key]:,} examples)"
+            f"\nAdding empty tuple category: {empty_tuple_key} ({empty_count:,} examples)"
         )
     elif empty_tuple_key:
         print(f"\nEmpty tuple category already in top 30: {empty_tuple_key}")
     else:
         print(f"\nWarning: No empty tuple category found in stats!")
 
-    return selected_keys, register_counts
+    return selected_keys
 
 
 def convert_register_key_to_filename(register_key: str) -> str:
@@ -89,6 +80,8 @@ def convert_register_key_to_filename(register_key: str) -> str:
     # Remove parentheses, quotes, and convert to filename-safe format
     cleaned = register_key.strip("()").replace("'", "").replace('"', "")
     # Replace commas and spaces with underscores
+    import re
+
     cleaned = re.sub(r"[,\s]+", "_", cleaned)
     # Remove any remaining special characters except underscores
     cleaned = re.sub(r"[^\w_]", "", cleaned)
@@ -96,14 +89,11 @@ def convert_register_key_to_filename(register_key: str) -> str:
     return cleaned if cleaned else "unknown_register"
 
 
-def sample_register_data(
-    language_code: str,
-    selected_keys: List[str],
-    register_counts: Dict[str, int],
-    sample_size: int = 1000,
+def sample_registers_incrementally(
+    language_code: str, selected_keys: List[str], sample_size: int = 1000
 ) -> Dict[str, int]:
     """
-    Sample random examples for each selected register from the language data.
+    Sample examples incrementally - take first N examples as we encounter them.
 
     Returns:
         Dictionary mapping register keys to actual number of samples obtained
@@ -117,14 +107,29 @@ def sample_register_data(
 
     print(f"\nProcessing {language_code} data from: {input_path}")
 
-    # First pass: collect all rows by register
-    register_data = {key: [] for key in selected_keys}
+    # Setup output directory and files
+    output_dir = f"{TOP_REGISTERS_PATH}/{language_code}"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Track counts and open file handles
+    register_counts = {key: 0 for key in selected_keys}
+    output_files = {}
+    headers_written = {}
+
+    # Open all output files
+    for register_key in selected_keys:
+        filename = convert_register_key_to_filename(register_key)
+        output_path = f"{output_dir}/{filename}.tsv"
+        output_files[register_key] = open(output_path, "w")
+        headers_written[register_key] = False
+
     chunk_size = 10000
     total_rows = 0
-
-    print("First pass: collecting data by register...")
+    completed_registers = set()
 
     try:
+        print("Processing data incrementally...")
+
         for chunk in tqdm(pd.read_csv(input_path, sep="\t", chunksize=chunk_size)):
             total_rows += len(chunk)
 
@@ -133,7 +138,11 @@ def sample_register_data(
                 [col for col in chunk.columns if not col.startswith("Unnamed: ")]
             ]
 
-            for idx, row in chunk.iterrows():
+            # Get header from first chunk
+            if not any(headers_written.values()):
+                header_line = "\t".join(chunk.columns) + "\n"
+
+            for _, row in chunk.iterrows():
                 # Parse register from fixed_register column and convert to tuple for consistency
                 preds_value = row["fixed_register"]
                 if isinstance(preds_value, str):
@@ -145,80 +154,75 @@ def sample_register_data(
 
                 key = str(preds_value)
 
-                # If this register is in our selected keys, store the row
-                if key in register_data:
-                    register_data[key].append(row)
+                # If this register is in our selected keys and not yet complete
+                if key in register_counts and key not in completed_registers:
+                    # Write header if not written yet
+                    if not headers_written[key]:
+                        output_files[key].write(header_line)
+                        headers_written[key] = True
 
-    except Exception as e:
-        print(f"Error reading data file: {str(e)}")
-        raise
+                    # Write the row
+                    row_line = "\t".join(str(val) for val in row.values) + "\n"
+                    output_files[key].write(row_line)
 
-    print(f"Processed {total_rows:,} total rows")
+                    register_counts[key] += 1
 
-    # Second pass: sample and save data for each register
-    sampling_results = {}
+                    # Mark as complete if we've reached the sample size
+                    if register_counts[key] >= sample_size:
+                        completed_registers.add(key)
+                        output_files[key].close()
+                        filename = convert_register_key_to_filename(key)
+                        print(
+                            f"Completed {key} -> {filename}.tsv: {register_counts[key]} examples"
+                        )
 
-    # Ensure output directory exists
-    output_dir = f"{TOP_REGISTERS_PATH}/{language_code}"
-    os.makedirs(output_dir, exist_ok=True)
+            # Check if all registers are complete
+            if len(completed_registers) == len(selected_keys):
+                print(f"All registers completed! Processed {total_rows:,} rows total.")
+                break
 
-    print("\nSecond pass: sampling and saving data...")
-
-    for register_key in selected_keys:
-        available_rows = len(register_data[register_key])
-        filename = convert_register_key_to_filename(register_key)
-        output_path = f"{output_dir}/{filename}.tsv"
-
-        if available_rows == 0:
-            print(f"WARNING: No data found for register {register_key}")
-            sampling_results[register_key] = 0
-            continue
-
-        if available_rows < sample_size:
-            print(
-                f"WARNING: Only {available_rows} examples available for register {register_key} (requested {sample_size})"
-            )
-
-        # Sample the data
-        sample_count = min(available_rows, sample_size)
-        if sample_count == available_rows:
-            # Use all available data
-            sampled_rows = register_data[register_key]
         else:
-            # Random sample
-            np.random.seed(42)  # For reproducibility
-            sampled_indices = np.random.choice(
-                available_rows, size=sample_count, replace=False
-            )
-            sampled_rows = [register_data[register_key][i] for i in sampled_indices]
+            # Loop completed without breaking - some registers may be incomplete
+            print(f"Finished processing all {total_rows:,} rows.")
 
-        # Convert to DataFrame and save
-        if sampled_rows:
-            sampled_df = pd.DataFrame(sampled_rows)
-            sampled_df.to_csv(output_path, sep="\t", index=False)
-            print(
-                f"Saved {len(sampled_df)} examples for {register_key} -> {filename}.tsv"
-            )
+            # Close any remaining open files
+            for key, file_handle in output_files.items():
+                if key not in completed_registers:
+                    file_handle.close()
 
-        sampling_results[register_key] = sample_count
+            # Report incomplete registers
+            incomplete_registers = [
+                key for key in selected_keys if register_counts[key] < sample_size
+            ]
+            if incomplete_registers:
+                print(
+                    f"\nWARNING: The following registers have fewer than {sample_size} examples:"
+                )
+                for key in incomplete_registers:
+                    filename = convert_register_key_to_filename(key)
+                    print(f"  {key} -> {filename}.tsv: {register_counts[key]} examples")
 
-    return sampling_results
+    finally:
+        # Ensure all files are closed
+        for file_handle in output_files.values():
+            if not file_handle.closed:
+                file_handle.close()
+
+    return register_counts
 
 
 def process_language_sampling(language_code: str) -> Dict[str, Any]:
     """Process sampling for a specific language."""
-    stats_path = f"{STATS_AFTER_FILTERING_BY_MEDIAN_AND_STD_PATH}/{language_code}_embeds_clean_filtered.tsv"
+    stats_path = f"{STATS_AFTER_FILTERING_BY_MEDIAN_AND_STD_PATH}/{language_code}_embeds_clean.tsv"
 
     try:
         # Load and analyze stats to get top registers
-        selected_keys, register_counts = load_and_analyze_stats(stats_path)
+        selected_keys = load_and_get_top_registers(stats_path)
 
         print(f"\nSelected {len(selected_keys)} register categories for sampling")
 
-        # Sample data for each register
-        sampling_results = sample_register_data(
-            language_code, selected_keys, register_counts
-        )
+        # Sample data for each register incrementally
+        sampling_results = sample_registers_incrementally(language_code, selected_keys)
 
         return {
             "selected_registers": len(selected_keys),
