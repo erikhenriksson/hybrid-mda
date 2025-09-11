@@ -8,7 +8,8 @@ from tqdm import tqdm
 
 from config import (
     FILTERED_BY_MEDIAN_AND_STD_PATH,
-    FILTERED_BY_MIN_LENGTH_PATH,
+    FILTERED_BY_TOXICITY_PATH,
+    STATS_AFTER_FILTERING_BY_TOXICITY_PATH,
 )
 
 
@@ -64,19 +65,17 @@ def convert_preds_to_key(preds_value):
 
 def process_language_data(language_code):
     """Process data for a specific language in chunks with median +- 1 std filtering."""
-    # Input path (already filtered by minimum length)
-    input_path = (
-        f"data/{FILTERED_BY_MIN_LENGTH_PATH}/{language_code}_embeds_filtered.tsv"
-    )
+    # Input path (already filtered)
+    input_path = f"{FILTERED_BY_TOXICITY_PATH}/{language_code}_embeds_clean.tsv"
 
     # Output path for median ± std filtering
     output_path = (
-        f"data/{FILTERED_BY_MEDIAN_AND_STD_PATH}/{language_code}_embeds_filtered.tsv"
+        f"{FILTERED_BY_MEDIAN_AND_STD_PATH}/{language_code}_embeds_clean_filtered.tsv"
     )
 
-    # Stats path (generated from min length filtered data)
+    # Stats path
     stats_path = (
-        f"reports/{FILTERED_BY_MIN_LENGTH_PATH}/{language_code}_embeds_filtered.tsv"
+        f"{STATS_AFTER_FILTERING_BY_TOXICITY_PATH}/{language_code}_embeds_clean.tsv"
     )
 
     # Ensure output directory exists
@@ -203,7 +202,7 @@ def process_language_data(language_code):
 
 def main():
     # Process all language files
-    languages = ["en", "fi", "fr", "sv"]
+    languages = ["fr", "sv"]
     results = {}
 
     for lang in languages:
