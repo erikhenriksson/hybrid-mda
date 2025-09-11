@@ -85,6 +85,8 @@ def convert_register_key_to_filename(register_key: str) -> str:
     cleaned = re.sub(r"[,\s]+", "_", cleaned)
     # Remove any remaining special characters except underscores
     cleaned = re.sub(r"[^\w_]", "", cleaned)
+    # Remove trailing underscores
+    cleaned = cleaned.rstrip("_")
 
     return cleaned if cleaned else "unknown_register"
 
