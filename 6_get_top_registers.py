@@ -134,10 +134,14 @@ def sample_register_data(
             ]
 
             for idx, row in chunk.iterrows():
-                # Parse tuple from preds column
+                # Parse register from fixed_register column and convert to tuple for consistency
                 preds_value = row["fixed_register"]
                 if isinstance(preds_value, str):
                     preds_value = ast.literal_eval(preds_value)
+
+                # Convert list to tuple for consistent comparison with stats
+                if isinstance(preds_value, list):
+                    preds_value = tuple(preds_value)
 
                 key = str(preds_value)
 
