@@ -21,7 +21,7 @@ def load_stats_file(stats_path):
     stats_dict = {}
     for _, row in stats_df.iterrows():
         # Convert preds to a consistent string format
-        preds_value = row["preds"]
+        preds_value = row["fixed_register"]
         if isinstance(preds_value, str):
             try:
                 preds_value = eval(preds_value)
@@ -126,7 +126,7 @@ def process_language_data(language_code):
 
                 for idx, row in chunk_copy.iterrows():
                     # Convert preds to a consistent key format
-                    preds_value = row["preds"]
+                    preds_value = row["fixed_register"]
                     preds_key = convert_preds_to_key(preds_value)
 
                     # Check if category is missing
