@@ -28,7 +28,7 @@ def generate_filtered_stats(language_codes=None):
         print(f"\nProcessing filtered data for {lang}...")
 
         # Construct filtered data path
-        filtered_path = os.path.join(input_dir, f"{lang}_embeds_clean.tsv")
+        filtered_path = os.path.join(input_dir, f"{lang}_embeds_clean_filtered.tsv")
 
         if not os.path.exists(filtered_path):
             print(f"Filtered file not found: {filtered_path}")
@@ -36,7 +36,8 @@ def generate_filtered_stats(language_codes=None):
 
         # Output path for statistics - keep same directory structure
         output_stats_path = os.path.join(
-            STATS_AFTER_FILTERING_BY_MEDIAN_AND_STD_PATH, f"{lang}_embeds_clean.tsv"
+            STATS_AFTER_FILTERING_BY_MEDIAN_AND_STD_PATH,
+            f"{lang}_embeds_clean_filtered.tsv",
         )
 
         # Ensure output directory exists
