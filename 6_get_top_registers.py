@@ -135,7 +135,7 @@ def sample_register_data(
 
             for idx, row in chunk.iterrows():
                 # Parse tuple from preds column
-                preds_value = row["preds"]
+                preds_value = row["fixed_register"]
                 if isinstance(preds_value, str):
                     preds_value = ast.literal_eval(preds_value)
 
