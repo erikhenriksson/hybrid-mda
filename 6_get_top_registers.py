@@ -232,7 +232,7 @@ def process_language_sampling(language_code: str) -> Dict[str, Any]:
 
 def main():
     """Main function to process all languages."""
-    languages = ["sv"]
+    languages = ["fr", "sv"]
     results = {}
 
     for lang in languages:
