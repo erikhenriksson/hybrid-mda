@@ -21,7 +21,7 @@ def load_stats_file(stats_path):
     stats_dict = {}
     for _, row in stats_df.iterrows():
         # Convert preds to a consistent string format
-        preds_value = row["fixed_register"]
+        preds_value = row["preds"]
         if isinstance(preds_value, str):
             try:
                 preds_value = eval(preds_value)
