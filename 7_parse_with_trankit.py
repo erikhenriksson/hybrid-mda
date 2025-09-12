@@ -167,7 +167,7 @@ def parse_files_for_language(language_code: str):
 
 def main():
     """Main function to process all languages."""
-    languages = ["fr", "sv"]
+    languages = ["fr"]
 
     for lang in languages:
         print(f"\n{'=' * 60}")
