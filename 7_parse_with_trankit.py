@@ -37,10 +37,6 @@ def clean_text_for_parsing(text: str) -> str:
     if len(text) < 2:
         return "Empty text."
 
-    # Limit extremely long texts that might cause memory issues
-    if len(text) > 10000:
-        text = text[:10000] + "..."
-
     return text
 
 
