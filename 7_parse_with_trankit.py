@@ -128,12 +128,18 @@ def parse_files_for_language(language_code: str):
                 parsed = p(text_content)
             except:
                 print("GPU parsing failed, retrying on CPU...")
-                p = trankit.Pipeline(trankit_lang, gpu=False)
-                parsed = p(text_content)
+                try:
+                    p = trankit.Pipeline(trankit_lang, gpu=False)
+                    parsed = p(text_content)
+                except Exception as e:
+                    print(f"Error parsing with CPU: {e}")
+                    exit()
                 # Re-initialize GPU pipeline for next texts
                 print("Re-initializing GPU pipeline...")
                 p = trankit.Pipeline(trankit_lang, gpu=True)
+
                 print("GPU pipeline re-initialized.")
+                print("succesSs")
 
             # Extract tokens from all sentences
             for sent_idx, sentence in enumerate(parsed["sentences"]):
