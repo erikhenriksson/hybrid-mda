@@ -167,9 +167,13 @@ def parse_files_for_language(language_code: str):
 
         except Exception as e:
             print(f"Error processing {filename}: {str(e)}")
+
             import traceback
 
             traceback.print_exc()
+            print(
+                f"Error parsing text_id {text_id}: content: {repr(text_content[:200])}"
+            )
             exit()
 
 
