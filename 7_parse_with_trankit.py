@@ -111,6 +111,9 @@ def parse_files_for_language(language_code: str):
             # Load the data
             df = pd.read_csv(tsv_file, sep="\t")
 
+            # Extract register info from filename (convert underscores to spaces)
+            register_info = register_name.replace("_", " ")
+
             # Prepare output data
             parsed_rows = []
 
@@ -141,8 +144,12 @@ def parse_files_for_language(language_code: str):
                             "misc",
                         ]
 
-                        # Start with text_id and sentence_id
-                        parsed_row = {"text_id": text_id, "sentence_id": sent_idx}
+                        # Start with text_id, sentence_id, and register
+                        parsed_row = {
+                            "text_id": text_id,
+                            "sentence_id": sent_idx,
+                            "register": register_info,
+                        }
 
                         # Add all expected token fields with defaults for missing keys
                         for col in expected_columns:
@@ -167,7 +174,7 @@ def parse_files_for_language(language_code: str):
 
 def main():
     """Main function to process all languages."""
-    languages = ["fr"]
+    languages = ["fr", "sv"]
 
     for lang in languages:
         print(f"\n{'=' * 60}")
