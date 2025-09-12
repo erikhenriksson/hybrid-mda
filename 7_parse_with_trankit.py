@@ -170,6 +170,7 @@ def parse_files_for_language(language_code: str):
             import traceback
 
             traceback.print_exc()
+            exit()
 
 
 def main():
