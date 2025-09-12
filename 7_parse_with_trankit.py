@@ -180,14 +180,8 @@ def main():
         print(f"Processing {lang.upper()} files...")
         print(f"{'=' * 60}")
 
-        try:
-            parse_files_for_language(lang)
-            print(f"\n✓ {lang} processing completed")
-        except Exception as e:
-            print(f"\n✗ Error processing {lang}: {str(e)}")
-            import traceback
-
-            traceback.print_exc()
+        parse_files_for_language(lang)
+        print(f"\n✓ {lang} processing completed")
 
 
 if __name__ == "__main__":
