@@ -107,88 +107,76 @@ def parse_files_for_language(language_code: str):
 
         print(f"Processing {filename}...")
 
-        try:
-            # Load the data
-            df = pd.read_csv(tsv_file, sep="\t")
+        # Load the data
+        df = pd.read_csv(tsv_file, sep="\t")
 
-            # Extract register info from filename (convert underscores to spaces)
-            register_info = register_name.replace("_", " ")
+        # Extract register info from filename (convert underscores to spaces)
+        register_info = register_name.replace("_", " ")
 
-            # Prepare output data
-            parsed_rows = []
+        # Prepare output data
+        parsed_rows = []
 
-            # Process each text
-            for idx, row in tqdm(
-                df.iterrows(), total=len(df), desc=f"Parsing texts in {filename}"
-            ):
-                text_id = row["id"]
-                text_content = str(row["text"])
+        # Process each text
+        for idx, row in tqdm(
+            df.iterrows(), total=len(df), desc=f"Parsing texts in {filename}"
+        ):
+            text_id = row["id"]
+            text_content = str(row["text"])
 
-                # Parse with Trankit
-                try:
-                    parsed = p(text_content)
-                except:
-                    print("GPU parsing failed, retrying on CPU...")
-                    p = trankit.Pipeline(trankit_lang, gpu=False)
-                    parsed = p(text_content)
-                    # Re-initialize GPU pipeline for next texts
-                    print("Re-initializing GPU pipeline...")
-                    p = trankit.Pipeline(trankit_lang, gpu=True)
-                    print("GPU pipeline re-initialized.")
+            # Parse with Trankit
+            try:
+                parsed = p(text_content)
+            except:
+                print("GPU parsing failed, retrying on CPU...")
+                p = trankit.Pipeline(trankit_lang, gpu=False)
+                parsed = p(text_content)
+                # Re-initialize GPU pipeline for next texts
+                print("Re-initializing GPU pipeline...")
+                p = trankit.Pipeline(trankit_lang, gpu=True)
+                print("GPU pipeline re-initialized.")
 
-                # Extract tokens from all sentences
-                for sent_idx, sentence in enumerate(parsed["sentences"]):
-                    for token in sentence["tokens"]:
-                        # Define expected columns in order
-                        expected_columns = [
-                            "id",
-                            "text",
-                            "lemma",
-                            "upos",
-                            "xpos",
-                            "feats",
-                            "head",
-                            "deprel",
-                            "deps",
-                            "misc",
-                        ]
+            # Extract tokens from all sentences
+            for sent_idx, sentence in enumerate(parsed["sentences"]):
+                for token in sentence["tokens"]:
+                    # Define expected columns in order
+                    expected_columns = [
+                        "id",
+                        "text",
+                        "lemma",
+                        "upos",
+                        "xpos",
+                        "feats",
+                        "head",
+                        "deprel",
+                        "deps",
+                        "misc",
+                    ]
 
-                        # Start with text_id, sentence_id, and register
-                        parsed_row = {
-                            "text_id": text_id,
-                            "sentence_id": sent_idx,
-                            "register": register_info,
-                        }
+                    # Start with text_id, sentence_id, and register
+                    parsed_row = {
+                        "text_id": text_id,
+                        "sentence_id": sent_idx,
+                        "register": register_info,
+                    }
 
-                        # Add all expected token fields with defaults for missing keys
-                        for col in expected_columns:
-                            parsed_row[col] = token.get(col, "")
+                    # Add all expected token fields with defaults for missing keys
+                    for col in expected_columns:
+                        parsed_row[col] = token.get(col, "")
 
-                        parsed_rows.append(parsed_row)
+                    parsed_rows.append(parsed_row)
 
-            # Save parsed data
-            if parsed_rows:
-                parsed_df = pd.DataFrame(parsed_rows)
-                parsed_df.to_csv(output_file, sep="\t", index=False)
-                print(f"Saved {len(parsed_rows)} tokens to {output_file}")
-            else:
-                print(f"No tokens parsed for {filename}")
-
-        except Exception as e:
-            print(f"Error processing {filename}: {str(e)}")
-
-            import traceback
-
-            traceback.print_exc()
-            print(
-                f"Error parsing text_id {text_id}: content: {repr(text_content[:200])}"
-            )
-            exit()
+        # Save parsed data
+        if parsed_rows:
+            parsed_df = pd.DataFrame(parsed_rows)
+            parsed_df.to_csv(output_file, sep="\t", index=False)
+            print(f"Saved {len(parsed_rows)} tokens to {output_file}")
+        else:
+            print(f"No tokens parsed for {filename}")
 
 
 def main():
     """Main function to process all languages."""
-    languages = ["sv"]
+    languages = ["fr"]
 
     for lang in languages:
         print(f"\n{'=' * 60}")
