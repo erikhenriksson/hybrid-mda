@@ -17,11 +17,44 @@ def clean_text_for_parsing(text: str) -> str:
     Clean text to avoid CUDA/tokenization errors.
     Remove problematic characters that can cause index out of bounds errors.
     """
+    import re
+
     if not isinstance(text, str):
         text = str(text)
 
     # Remove null bytes and other control characters
     text = text.replace("\x00", "")
+
+    # Fix common encoding issues (mojibake)
+    encoding_fixes = {
+        "Ã©": "é",
+        "Ã¨": "è",
+        "Ã¢": "â",
+        "Ã´": "ô",
+        "Ã§": "ç",
+        "Ã ": "à",
+        "Ãª": "ê",
+        "Ã®": "î",
+        "Ã¯": "ï",
+        "Ã¹": "ù",
+        "Ã»": "û",
+        "Ã¼": "ü",
+        "â€™": "'",
+        "â€œ": '"',
+        "â€": '"',
+        "â€¦": "...",
+        'â€"': "-",
+        'â€"': "--",
+        "Ã¡": "á",
+        "Ã­": "í",
+        "Ã³": "ó",
+        "Ãº": "ú",
+        "Ã±": "ñ",
+        "Ã§": "ç",
+    }
+
+    for bad_char, good_char in encoding_fixes.items():
+        text = text.replace(bad_char, good_char)
 
     # Remove other problematic control characters but keep basic whitespace
     # Keep only printable characters, basic whitespace, and common unicode
