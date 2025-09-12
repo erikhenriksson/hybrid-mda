@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 
 import pandas as pd
 import trankit
@@ -9,6 +10,38 @@ from config import (
     PARSED_CONLLU_PATH,
     TOP_REGISTERS_PATH,
 )
+
+
+def clean_text_for_parsing(text: str) -> str:
+    """
+    Clean text to avoid CUDA/tokenization errors.
+    Remove problematic characters that can cause index out of bounds errors.
+    """
+    if not isinstance(text, str):
+        text = str(text)
+
+    # Remove null bytes and other control characters
+    text = text.replace("\x00", "")
+
+    # Remove other problematic control characters but keep basic whitespace
+    # Keep only printable characters, basic whitespace, and common unicode
+    text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]", "", text)
+
+    # Replace multiple whitespace with single space
+    text = re.sub(r"\s+", " ", text)
+
+    # Strip leading/trailing whitespace
+    text = text.strip()
+
+    # If text becomes empty or too short after cleaning, return a safe default
+    if len(text) < 2:
+        return "Empty text."
+
+    # Limit extremely long texts that might cause memory issues
+    if len(text) > 10000:
+        text = text[:10000] + "..."
+
+    return text
 
 
 def check_parsing_status(original_file: str, parsed_file: str) -> str:
@@ -116,6 +149,7 @@ def parse_files_for_language(language_code: str):
 
             # Prepare output data
             parsed_rows = []
+            skipped_texts = 0
 
             # Process each text
             for idx, row in tqdm(
@@ -124,8 +158,17 @@ def parse_files_for_language(language_code: str):
                 text_id = row["id"]
                 text_content = str(row["text"])
 
-                # Parse with Trankit
-                parsed = p(text_content)
+                # Clean text to avoid CUDA/tokenization errors
+                cleaned_text = clean_text_for_parsing(text_content)
+
+                try:
+                    # Parse with Trankit
+                    parsed = p(cleaned_text)
+                except Exception as e:
+                    print(f"Error parsing text_id {text_id}: {str(e)}")
+                    skipped_texts += 1
+                    # Skip this problematic text and continue
+                    continue
 
                 # Extract tokens from all sentences
                 for sent_idx, sentence in enumerate(parsed["sentences"]):
@@ -162,6 +205,10 @@ def parse_files_for_language(language_code: str):
                 parsed_df = pd.DataFrame(parsed_rows)
                 parsed_df.to_csv(output_file, sep="\t", index=False)
                 print(f"Saved {len(parsed_rows)} tokens to {output_file}")
+                if skipped_texts > 0:
+                    print(
+                        f"Skipped {skipped_texts} problematic texts due to parsing errors"
+                    )
             else:
                 print(f"No tokens parsed for {filename}")
 
