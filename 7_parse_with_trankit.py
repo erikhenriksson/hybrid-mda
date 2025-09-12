@@ -11,6 +11,37 @@ from config import (
 )
 
 
+def check_parsing_status(original_file: str, parsed_file: str) -> str:
+    """
+    Check if parsing is complete by comparing text IDs.
+
+    Returns:
+        'complete' - parsing is done, skip this file
+        'partial' - parsing is incomplete, delete parsed file and restart
+        'missing' - no parsed file exists, start fresh
+    """
+    if not os.path.exists(parsed_file):
+        return "missing"
+
+    try:
+        # Load original file IDs
+        original_df = pd.read_csv(original_file, sep="\t")
+        original_ids = set(original_df["id"])
+
+        # Load parsed file IDs
+        parsed_df = pd.read_csv(parsed_file, sep="\t")
+        parsed_ids = set(parsed_df["text_id"])
+
+        if original_ids == parsed_ids:
+            return "complete"
+        else:
+            return "partial"
+
+    except Exception as e:
+        print(f"Error checking parsing status: {e}")
+        return "partial"  # Safer to restart if we can't determine status
+
+
 def parse_files_for_language(language_code: str):
     """Parse all register files for a given language using Trankit."""
 
@@ -59,7 +90,22 @@ def parse_files_for_language(language_code: str):
         register_name = filename.replace(".tsv", "")
         output_file = f"{output_dir}/{register_name}_parsed.tsv"
 
-        print(f"\nProcessing {filename}...")
+        # Check if parsing is already complete
+        status = check_parsing_status(tsv_file, output_file)
+
+        if status == "complete":
+            print(f"✓ {filename} already parsed completely, skipping")
+            continue
+        elif status == "partial":
+            print(f"⚠ {filename} partially parsed, restarting from scratch")
+            try:
+                os.remove(output_file)
+            except:
+                pass
+        else:  # status == 'missing'
+            print(f"→ {filename} starting fresh parse")
+
+        print(f"Processing {filename}...")
 
         try:
             # Load the data
