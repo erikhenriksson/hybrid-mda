@@ -121,6 +121,9 @@ def parse_files_for_language(language_code: str):
             df.iterrows(), total=len(df), desc=f"Parsing texts in {filename}"
         ):
             text_id = row["id"]
+            if text_id == "6d95123f0ba61d1cf6e519c9a194f004":
+                print("skip problem")
+                continue
             text_content = str(row["text"])
 
             # Parse with Trankit
