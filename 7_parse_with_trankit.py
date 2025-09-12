@@ -14,6 +14,14 @@ from config import (
 def parse_files_for_language(language_code: str):
     """Parse all register files for a given language using Trankit."""
 
+    # Map language codes to Trankit language names
+    trankit_lang_map = {
+        "fr": "french",
+        "sv": "swedish",  # Try swedish first, may need adjustment
+    }
+
+    trankit_lang = trankit_lang_map.get(language_code, language_code)
+
     # Setup paths
     input_dir = f"{TOP_REGISTERS_PATH}/{language_code}"
     output_dir = f"{PARSED_CONLLU_PATH}/{language_code}"
@@ -26,8 +34,15 @@ def parse_files_for_language(language_code: str):
     os.makedirs(output_dir, exist_ok=True)
 
     # Initialize Trankit pipeline
-    print(f"Initializing Trankit pipeline for {language_code}...")
-    p = trankit.Pipeline(language_code, gpu=True)
+    print(f"Initializing Trankit pipeline for {trankit_lang} (from {language_code})...")
+    try:
+        p = trankit.Pipeline(trankit_lang, gpu=True)
+    except Exception as e:
+        print(f"Error initializing Trankit for '{trankit_lang}': {e}")
+        print(
+            "Available languages can be checked with: import trankit; print(trankit.supported_langs)"
+        )
+        return
 
     # Get all TSV files in the input directory
     tsv_files = glob.glob(f"{input_dir}/*.tsv")
