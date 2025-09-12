@@ -128,6 +128,8 @@ def parse_files_for_language(language_code: str):
                 parsed = p(text_content)
             except:
                 print(f"Error parsing text ID {text_id}, skipping...")
+                p = None
+                p = trankit.Pipeline(trankit_lang, gpu=True)
                 continue
 
             # Extract tokens from all sentences
