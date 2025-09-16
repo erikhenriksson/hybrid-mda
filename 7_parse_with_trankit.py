@@ -124,6 +124,7 @@ def parse_files_for_language(language_code: str):
             if text_id in [
                 "6d95123f0ba61d1cf6e519c9a194f004",
                 "5a0be57bc9ef03b2ffbc1eca3370fa32",
+                "059e4bec8b82358b90d5fb753e9395f3",
             ]:
                 print("skip problem")
                 continue
