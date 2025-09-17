@@ -156,18 +156,36 @@ def parse_files_for_language(language_code: str):
                         "misc",
                     ]
 
-                    # Start with text_id, sentence_id, and register
-                    parsed_row = {
-                        "text_id": text_id,
-                        "sentence_id": sent_idx,
-                        "register": register_info,
-                    }
+                    # Check if this is a multiword token (tuple ID indicates MWT)
+                    if isinstance(token["id"], tuple) and "expanded" in token:
+                        # Process each expanded component as a separate token
+                        for expanded_token in token["expanded"]:
+                            # Start with text_id, sentence_id, and register
+                            parsed_row = {
+                                "text_id": text_id,
+                                "sentence_id": sent_idx,
+                                "register": register_info,
+                            }
 
-                    # Add all expected token fields with defaults for missing keys
-                    for col in expected_columns:
-                        parsed_row[col] = token.get(col, "")
+                            # Add all expected token fields with defaults for missing keys
+                            for col in expected_columns:
+                                parsed_row[col] = expanded_token.get(col, "")
 
-                    parsed_rows.append(parsed_row)
+                            parsed_rows.append(parsed_row)
+                    else:
+                        # Regular token processing
+                        # Start with text_id, sentence_id, and register
+                        parsed_row = {
+                            "text_id": text_id,
+                            "sentence_id": sent_idx,
+                            "register": register_info,
+                        }
+
+                        # Add all expected token fields with defaults for missing keys
+                        for col in expected_columns:
+                            parsed_row[col] = token.get(col, "")
+
+                        parsed_rows.append(parsed_row)
 
         # Save parsed data
         if parsed_rows:
